@@ -808,6 +808,14 @@ def load_pyannote_pipeline(pipeline_class: object, model_name: str, token: str |
         )
 
 
+def disable_pyannote_telemetry() -> None:
+    # pyannote.audio 4 reports usage (pipeline name, audio duration, speaker
+    # counts) to otel.pyannote.ai unless told otherwise before it is imported.
+    # MeetRec promises that nothing leaves the Mac; setdefault keeps an
+    # explicit opt-in from the environment or .env.
+    os.environ.setdefault("PYANNOTE_METRICS_ENABLED", "false")
+
+
 def load_diarizer(args: argparse.Namespace) -> object | None:
     if not args.diarize:
         return None
@@ -817,6 +825,7 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
     # apart from the rest and let the caller finish without speaker labels.
     # Anything else — a dropped connection, an exhausted disk — still escapes,
     # because there the retry is the whole point.
+    disable_pyannote_telemetry()
     try:
         from pyannote.audio import Pipeline
     except ImportError as exc:
@@ -824,6 +833,22 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
             "pyannote.audio is not installed; install "
             "requirements-diarization.txt to enable it."
         ) from exc
+
+    # An environment created before the requirement moved to 4 still has 3.x,
+    # whose calls fail against huggingface_hub 1.x with a TypeError on every
+    # attempt. Retrying cannot fix that, so it settles here and the transcript
+    # is kept. A version that cannot be parsed is taken as 4: better to try
+    # than to refuse a working install.
+    import pyannote.audio
+
+    version = str(getattr(pyannote.audio, "__version__", "4"))
+    major_text = version.split(".", 1)[0]
+    major = int(major_text) if major_text.isdigit() else 4
+    if major < 4:
+        raise DiarizationUnavailable(
+            f"pyannote.audio {version} is installed; 4.x is required. "
+            "Run .venv/bin/python -m pip install -U -r requirements-diarization.txt."
+        )
 
     token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
 
@@ -837,6 +862,14 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
                 "check HF_TOKEN in .env and accept the model conditions."
             ) from exc
         raise
+    # pyannote can answer a gated or unknown repository by printing advice and
+    # returning None instead of raising. That is the same refused token as
+    # above, so it settles the same way.
+    if pipeline is None:
+        raise DiarizationUnavailable(
+            f"the Hugging Face token cannot access {args.diarization_model}; "
+            "check HF_TOKEN in .env and accept the model conditions."
+        )
 
     import torch
 
