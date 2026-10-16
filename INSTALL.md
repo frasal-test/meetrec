@@ -358,7 +358,9 @@ macOS does not let any app hear you or capture other apps' sound without an
 explicit grant, and it only asks the first time the app actually tries.
 
 Click the MeetRec icon and choose **Start recording — Italiano** (or whichever
-language you want).
+language you want). MeetRec first asks whether you have told the participants
+(see [Step 11](#step-11--record-your-first-meeting)); for this test click the
+first button (**Sì, registra**, or **Yes, record** in English).
 
 1. macOS asks for the **Microphone**. Click **Allow**.
 2. macOS also shows its own screen-recording dialog; click **Open System
@@ -423,7 +425,8 @@ Every line should start with `✓`:
 
 The version numbers and paths on your Mac will differ. If you turned speaker
 separation off, the `Apple Silicon`, `pyannote.audio`, `Hugging Face token` and
-`Model access` lines are not shown.
+`Model access` lines are not shown. The `Model access` lines also stay hidden
+until both `pyannote.audio` and `Hugging Face token` pass: fix those first.
 
 Any `✗` points at the step that did not take: `Python 3.10+` at Step 3,
 `faster-whisper` or `pyannote.audio` at Step 5, `Apple Silicon` means this is an
@@ -455,8 +458,14 @@ from each track.
 
 1. Click the MeetRec icon and choose the language of the meeting: **Italiano**, **English**,
    **Español**, or **Auto detect** if you are not sure.
-2. The icon changes to show that recording is running.
-3. At the end, choose **Stop recording** from the MeetRec menu.
+2. MeetRec asks whether you have told the participants, in the language you
+   picked (English for Auto detect). **Yes, record** starts recording; **Copy
+   notice and record** also puts a short notice on the clipboard, ready to
+   paste into the meeting chat; **Cancel** records nothing. Ticking **Don't ask
+   again** turns the question off; the menu item **Ask about participants
+   before recording** turns it back on.
+3. The icon changes to show that recording is running.
+4. At the end, choose **Stop recording** from the MeetRec menu.
 
 Transcription then starts in the background — you can start another meeting
 while it runs. The menu-bar icon shows the progress percentage, and the menu
@@ -485,7 +494,10 @@ is a folder named after its start time, for example
   full structured output with timings and speakers.
 - `transcripts/transcript.speakers.txt` — grouped by speaker.
 - `audio/mic.caf` and `audio/system.caf` — your voice and everyone else's, kept
-  as separate recordings.
+  as separate recordings. They stay unless you tick **Delete audio after a
+  clean transcript** in the MeetRec menu; then `audio/` is deleted once a
+  transcription completes with text and no warnings. A session without its
+  audio cannot be transcribed again.
 - `transcribe.log` — short status lines about the transcription. The detailed
   output of recordings made from the menu bar (model download, progress,
   errors) is in `recordings/.menubar.log` instead. Read both when something
@@ -613,6 +625,9 @@ your token:
 - `token rejected` — the token is wrong, revoked or mistyped. Create a new
   **Read** token (or a fine-grained one with "Read access to contents of all
   public gated repos you can access") and rewrite `.env`.
+- `token cannot read gated repositories — use a Read token` — the token is
+  fine-grained without that permission. Create a plain **Read** token and
+  rewrite `.env`.
 - `could not check: …` — usually no internet connection. Try again later.
 
 ### "Cannot access the pyannote diarization model on Hugging Face"
@@ -654,7 +669,9 @@ redone.
 ### Re-transcribing a session
 
 Transcribing again is safe: it overwrites the files in `transcripts/` and never
-touches the recorded audio in `audio/`.
+touches the recorded audio in `audio/`. It needs that audio, though: if
+**Delete audio after a clean transcript** already removed it, the command stops
+with `No non-empty audio tracks`.
 
 A finished session is not picked up again unless you force it, which is what
 `--force` is for. Replace `recordings/2026-07-29T10-30-00` with the folder of
@@ -718,6 +735,13 @@ tail -f recordings/2026-07-29T10-30-00/transcribe.log
 
 During the first run you will see the model download. Press `Ctrl + C` to stop
 watching the log — this does not stop the transcription.
+
+`recordings/.menubar.log` only grows. To empty it, wait until no transcription
+is running and run:
+
+```bash
+: > recordings/.menubar.log
+```
 
 ### The transcript is full of repeated filler like "Okay."
 
@@ -814,7 +838,10 @@ a clean Mac:
 - `~/Library/Application Support/MeetRec`
 - `~/.cache/huggingface` — the downloaded models, about 1.5 GB. Other programs
   may use them too.
-- `~/.config/meetrec` — your configuration, if you created one.
+- `~/.config/meetrec` — your configuration, if you created one (ticking
+  **Delete audio after a clean transcript** creates it).
+- The menu's **Ask about participants before recording** choice, removed with
+  `defaults delete com.frasal.meetrec.menubar`.
 - The `MeetRec Dev` certificate: in Keychain Access, open the login keychain,
   My Certificates, and delete it if you no longer need it.
 
