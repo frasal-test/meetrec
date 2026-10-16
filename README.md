@@ -129,7 +129,11 @@ The MeetRec menu has:
 - Stop recording
 - Open recordings
 - Run doctor
+- Ask about participants before recording (on by default)
+- Delete audio after a clean transcript (off by default)
 - Quit MeetRec
+
+Before every recording MeetRec asks "Have you told the participants?" in the language of the preset (English for Auto detect). "Copy notice and record" also puts a short notice on the clipboard, ready to paste into the meeting chat. Ticking "Don't ask again" turns the question off; the menu item turns it back on. See [Responsible use](#responsible-use).
 
 While recording, the icon's right-hand sound bar becomes a dot and the elapsed time appears next to it. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The icon shows the percentage, then ✓ (or ! if the job failed), and the menu shows a progress bar with the current phase (phase names are in Italian), diarization included. A macOS notification appears when the job finishes.
 
@@ -209,6 +213,7 @@ Everything is optional. The file is `~/.config/meetrec/config.json`; start from 
 | --- | --- | --- |
 | `recordings_dir` | `<project>/recordings` | Where sessions are written and where the worker looks for them. `RECORDINGS_DIR` overrides it. Not in `config.example.json`; add it only to move recordings. |
 | `on_stop` | `null` | Shell command run after the transcripts are written. |
+| `delete_audio_after_transcription` | `false` | Delete `audio/` once the transcript is written, but only when the job completed, the transcript has text and it has no warnings; otherwise the audio is kept so the session can be transcribed again. The menu item of the same name sets it; so does `meeting_recorder.control delete-audio on\|off`. Applies to `meet.sh` recordings too. |
 | `transcription.enabled` | `true` | `false` keeps the audio and skips transcription; `on_stop` still runs. |
 | `transcription.model` | `"medium"` | Whisper model name. |
 | `transcription.language` | `"it"` | Language code; `null` means auto-detect. |
@@ -324,7 +329,7 @@ The menu bar app writes the worker output (model download, per-segment lines, py
 
 ### Re-transcribing
 
-Safe to repeat: it overwrites `transcripts/` and never touches `audio/`.
+Safe to repeat: it overwrites `transcripts/` and never touches `audio/`. It needs the audio, so it is not possible for a session whose audio was deleted by `delete_audio_after_transcription`.
 
 ```bash
 .venv/bin/python -m meeting_recorder.control process recordings/2026-07-29T10-30-00 --force
@@ -346,7 +351,19 @@ Safe to repeat: it overwrites `transcripts/` and never touches `audio/`.
 
 ## Privacy and legal
 
-Processing is local. Models are downloaded from Hugging Face once and cached. MeetRec turns off pyannote's usage telemetry by default (`PYANNOTE_METRICS_ENABLED=false`). The `on_stop` hook is yours and may send data elsewhere. Recording meetings may require participant consent and compliance with company policy and applicable law.
+Processing is local. Models are downloaded from Hugging Face once and cached. MeetRec turns off pyannote's usage telemetry by default (`PYANNOTE_METRICS_ENABLED=false`). The `on_stop` hook is yours and may send data elsewhere.
+
+### Responsible use
+
+MeetRec is a recording tool, like a dictaphone: whether a recording is lawful depends on where you are, who is in the meeting and what you do with it, and that responsibility is yours. This is not legal advice. MeetRec is designed to stay inside the following boundary, and you should too:
+
+1. **Record only meetings you take part in.** MeetRec records your own microphone and your own Mac's audio output; it never joins a call on its own.
+2. **Tell everyone at the start.** Say it aloud (it then ends up in the recording itself) or paste the notice MeetRec copies for you. Several jurisdictions, including Germany and US states such as California, Florida, Illinois, Pennsylvania and Washington, require the consent of every participant. Telling everyone and letting them object satisfies the strictest rules almost everywhere.
+3. **Keep it local.** Audio and transcripts never leave your Mac unless you send them somewhere, for example with `on_stop`.
+4. **Use it for notes and minutes.** Not to monitor employees, not to publish, not to collect material behind someone's back.
+5. **Keep remote speakers anonymous.** Speaker separation labels voices `REMOTE_01`, `REMOTE_02` and stores no voice embeddings or voiceprints, so no one is identified by their voice.
+
+Keep only what you need: turn on "Delete audio after a clean transcript" if the text is enough for you. Your employer's policy may add rules of its own.
 
 ## Acknowledgements
 

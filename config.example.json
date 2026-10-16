@@ -1,5 +1,6 @@
 {
   "on_stop": null,
+  "delete_audio_after_transcription": false,
   "transcription": {
     "enabled": true,
     "model": "medium",

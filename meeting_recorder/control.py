@@ -14,10 +14,11 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-from .config import CONFIG_PATH, load_config
+from .config import CONFIG_PATH, load_config, set_config_value
 from .transcription import disable_pyannote_telemetry, load_env_files
 from .session_transcription import SessionProcessor
 from .sessions import (
+    delete_audio_if_clean,
     enqueue_session,
     pending_sessions,
     read_json,
@@ -77,6 +78,11 @@ def parse_args() -> argparse.Namespace:
     subparsers.add_parser("doctor")
     subparsers.add_parser("show-config")
     subparsers.add_parser("recordings-dir")
+    delete_audio = subparsers.add_parser(
+        "delete-audio",
+        help="Show or set whether audio is deleted after a clean transcript.",
+    )
+    delete_audio.add_argument("state", nargs="?", choices=("on", "off"))
     return parser.parse_args()
 
 
@@ -300,6 +306,8 @@ def process_queue(
             )
             if result.state != "complete":
                 exit_code = 2
+            elif config.delete_audio_after_transcription:
+                delete_audio_if_clean(session_dir)
         return exit_code
 
 
@@ -325,6 +333,9 @@ def main() -> int:
                 {
                     "recordings_dir": str(config.recordings_dir),
                     "on_stop": config.on_stop,
+                    "delete_audio_after_transcription": (
+                        config.delete_audio_after_transcription
+                    ),
                     "transcription": vars(config.transcription),
                 },
                 ensure_ascii=False,
@@ -334,6 +345,15 @@ def main() -> int:
         return 0
     if args.command == "recordings-dir":
         print(config.recordings_dir)
+        return 0
+    if args.command == "delete-audio":
+        enabled = config.delete_audio_after_transcription
+        if args.state is not None:
+            enabled = args.state == "on"
+            set_config_value(
+                args.config, "delete_audio_after_transcription", enabled
+            )
+        print("on" if enabled else "off")
         return 0
     if args.command == "doctor":
         return doctor(args.config)

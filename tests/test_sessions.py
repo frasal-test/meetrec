@@ -51,6 +51,8 @@ from meeting_recorder.session_transcription import (
     transcription_args,
 )
 from meeting_recorder.sessions import (
+    audio_deletion_blocker,
+    delete_audio_if_clean,
     enqueue_session,
     pending_sessions,
     read_json,
@@ -621,6 +623,140 @@ class DecodeOptionTests(unittest.TestCase):
         self.assertTrue(options["vad_filter"])
         self.assertEqual(options["hallucination_silence_threshold"], 2.0)
         self.assertTrue(options["condition_on_previous_text"])
+
+
+class AudioDeletionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.session = self.root / "2026-07-29T10-00-00"
+        (self.session / "audio").mkdir(parents=True)
+        (self.session / "audio" / "mic.caf").write_bytes(b"audio")
+        (self.session / "audio" / "system.caf").write_bytes(b"audio")
+        write_json(
+            self.session / "meta.json",
+            {
+                "state": "recorded",
+                "tracks": {
+                    "mic": "audio/mic.caf",
+                    "system": "audio/system.caf",
+                },
+            },
+        )
+        self.config = self.root / "config.json"
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def transcribe(self, transcript: dict | None) -> None:
+        def processor(session: Path) -> None:
+            if transcript is not None:
+                write_json(
+                    session / "transcripts" / "transcript.json",
+                    transcript,
+                )
+
+        enqueue_session(self.session)
+        run_job(self.session, processor)
+
+    def run_worker(self, delete_audio: bool) -> None:
+        write_json(
+            self.config,
+            {
+                "recordings_dir": str(self.root),
+                "delete_audio_after_transcription": delete_audio,
+            },
+        )
+        argv = ["meetrec", "--config", str(self.config), "worker", "--once"]
+        with mock.patch.dict(os.environ):
+            os.environ.pop("RECORDINGS_DIR", None)
+            with mock.patch.object(sys, "argv", argv):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    control_main()
+
+    def audio_exists(self) -> bool:
+        return (self.session / "audio" / "mic.caf").exists()
+
+    def test_clean_transcript_deletes_the_audio(self) -> None:
+        self.transcribe({"segments": [{"text": "ciao"}], "warnings": None})
+        self.assertTrue(delete_audio_if_clean(self.session))
+        self.assertFalse((self.session / "audio").exists())
+        self.assertIn(
+            "audio_deleted_at",
+            read_json(self.session / "meta.json"),
+        )
+
+    def test_warnings_keep_the_audio(self) -> None:
+        self.transcribe(
+            {
+                "segments": [{"text": "ciao"}],
+                "warnings": ["Speaker separation was skipped."],
+            }
+        )
+        self.assertEqual(
+            audio_deletion_blocker(self.session),
+            "the transcript has warnings",
+        )
+        self.assertFalse(delete_audio_if_clean(self.session))
+        self.assertTrue(self.audio_exists())
+
+    def test_empty_transcript_keeps_the_audio(self) -> None:
+        self.transcribe({"segments": [], "warnings": None})
+        self.assertFalse(delete_audio_if_clean(self.session))
+        self.assertTrue(self.audio_exists())
+
+    def test_missing_transcript_keeps_the_audio(self) -> None:
+        self.transcribe(None)
+        self.assertFalse(delete_audio_if_clean(self.session))
+        self.assertTrue(self.audio_exists())
+
+    def test_failed_job_keeps_the_audio(self) -> None:
+        enqueue_session(self.session, max_attempts=1)
+
+        def fail(_: Path) -> None:
+            raise RuntimeError("boom")
+
+        run_job(self.session, fail)
+        self.assertEqual(
+            audio_deletion_blocker(self.session),
+            "the job is not complete",
+        )
+        self.assertTrue(self.audio_exists())
+
+    def test_worker_deletes_only_when_enabled(self) -> None:
+        clean = {"segments": [{"text": "ciao"}], "warnings": None}
+        with mock.patch(
+            "meeting_recorder.control.SessionProcessor",
+            return_value=lambda session: write_json(
+                session / "transcripts" / "transcript.json", clean
+            ),
+        ):
+            enqueue_session(self.session)
+            self.run_worker(delete_audio=False)
+            self.assertTrue(self.audio_exists())
+
+            enqueue_session(self.session, force=True)
+            self.run_worker(delete_audio=True)
+            self.assertFalse(self.audio_exists())
+
+    def test_command_toggles_the_setting_and_keeps_other_keys(self) -> None:
+        write_json(self.config, {"on_stop": "/bin/true"})
+
+        def command(*arguments: str) -> str:
+            argv = ["meetrec", "--config", str(self.config), "delete-audio"]
+            stdout = io.StringIO()
+            with mock.patch.object(sys, "argv", argv + list(arguments)):
+                with contextlib.redirect_stdout(stdout):
+                    self.assertEqual(control_main(), 0)
+            return stdout.getvalue().strip()
+
+        self.assertEqual(command(), "off")
+        self.assertEqual(command("on"), "on")
+        self.assertEqual(command(), "on")
+        saved = read_json(self.config)
+        self.assertEqual(saved["on_stop"], "/bin/true")
+        self.assertTrue(saved["delete_audio_after_transcription"])
+        self.assertEqual(command("off"), "off")
 
 
 class TranscriptionSettingsTests(unittest.TestCase):

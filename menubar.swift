@@ -6,6 +6,68 @@ private struct RecordingPreset: Sendable {
     let model: String
 }
 
+/// Asked before every recording, in the language the meeting is recorded
+/// in so the notice can be pasted into the meeting chat as is. Auto detect
+/// has no language yet, so it gets English.
+private struct ConsentPrompt {
+    let title: String
+    let message: String
+    let record: String
+    let copyAndRecord: String
+    let cancel: String
+    let dontAsk: String
+    let notice: String
+
+    static func forLanguage(_ language: String) -> ConsentPrompt {
+        switch language {
+        case "it":
+            return ConsentPrompt(
+                title: "Hai informato i partecipanti?",
+                message: "Registra solo se tutti i partecipanti sanno che "
+                    + "stai registrando. In alcuni paesi, tra cui la "
+                    + "Germania e diversi stati USA, serve il consenso di "
+                    + "tutti.",
+                record: "Sì, registra",
+                copyAndRecord: "Copia avviso e registra",
+                cancel: "Annulla",
+                dontAsk: "Non chiedere più",
+                notice: "Registro questa riunione sul mio Mac per prendere "
+                    + "appunti; l'audio resta sul mio computer e non viene "
+                    + "caricato da nessuna parte. Ditemi se preferite di no."
+            )
+        case "es":
+            return ConsentPrompt(
+                title: "¿Has informado a los participantes?",
+                message: "Graba solo si todos los participantes saben que "
+                    + "estás grabando. En algunos lugares, como Alemania y "
+                    + "varios estados de EE. UU., se necesita el "
+                    + "consentimiento de todos.",
+                record: "Sí, grabar",
+                copyAndRecord: "Copiar aviso y grabar",
+                cancel: "Cancelar",
+                dontAsk: "No volver a preguntar",
+                notice: "Estoy grabando esta reunión en mi Mac para tomar "
+                    + "notas; el audio se queda en mi ordenador y no se sube "
+                    + "a ningún sitio. Decidme si preferís que no lo haga."
+            )
+        default:
+            return ConsentPrompt(
+                title: "Have you told the participants?",
+                message: "Record only if everyone in the meeting knows you "
+                    + "are recording. In some places, including Germany and "
+                    + "several US states, everyone has to consent.",
+                record: "Yes, record",
+                copyAndRecord: "Copy notice and record",
+                cancel: "Cancel",
+                dontAsk: "Don't ask again",
+                notice: "I'm recording this meeting on my Mac to take notes; "
+                    + "the audio stays on my computer and is not uploaded "
+                    + "anywhere. Let me know if you'd rather I didn't."
+            )
+        }
+    }
+}
+
 private struct JobProgress: Decodable {
     let phase: String
     let fraction: Double
@@ -81,6 +143,10 @@ final class MenuController: NSObject, @unchecked Sendable {
     private var currentProgress: JobProgress?
     private var progressLabel: NSTextField?
     private var progressIndicator: NSProgressIndicator?
+    /// Lives in the Python config so the worker, which does the deleting,
+    /// reads the same value. Nil until the first read comes back.
+    private var deleteAudioEnabled: Bool?
+    private static let skipConsentPromptKey = "skipConsentPrompt"
 
     init(projectURL: URL) {
         self.projectURL = projectURL
@@ -92,6 +158,7 @@ final class MenuController: NSObject, @unchecked Sendable {
         )
         super.init()
         configureMenu()
+        loadDeleteAudioSetting()
         resumePendingTranscriptions()
     }
 
@@ -103,12 +170,29 @@ final class MenuController: NSObject, @unchecked Sendable {
         projectURL: URL,
         pythonURL: URL
     ) -> URL {
+        if let text = controlOutput(
+            ["recordings-dir"],
+            projectURL: projectURL,
+            pythonURL: pythonURL
+        ) {
+            return URL(fileURLWithPath: text, isDirectory: true)
+        }
+        return ProcessInfo.processInfo.environment["RECORDINGS_DIR"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? projectURL.appendingPathComponent("recordings", isDirectory: true)
+    }
+
+    /// Runs a control command and returns its trimmed output, or nil when it
+    /// fails or prints nothing.
+    private static func controlOutput(
+        _ arguments: [String],
+        projectURL: URL,
+        pythonURL: URL
+    ) -> String? {
         let process = Process()
         let output = Pipe()
         process.executableURL = pythonURL
-        process.arguments = [
-            "-m", "meeting_recorder.control", "recordings-dir",
-        ]
+        process.arguments = ["-m", "meeting_recorder.control"] + arguments
         process.currentDirectoryURL = projectURL
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
@@ -121,12 +205,10 @@ final class MenuController: NSObject, @unchecked Sendable {
                    .trimmingCharacters(in: .whitespacesAndNewlines),
                !text.isEmpty
             {
-                return URL(fileURLWithPath: text, isDirectory: true)
+                return text
             }
         } catch {}
-        return ProcessInfo.processInfo.environment["RECORDINGS_DIR"]
-            .map { URL(fileURLWithPath: $0, isDirectory: true) }
-            ?? projectURL.appendingPathComponent("recordings", isDirectory: true)
+        return nil
     }
 
     private static func templateImage(
@@ -215,6 +297,28 @@ final class MenuController: NSObject, @unchecked Sendable {
             keyEquivalent: "d"
         ).target = self
         menu.addItem(.separator())
+        let consentItem = menu.addItem(
+            withTitle: "Ask about participants before recording",
+            action: #selector(toggleConsentPrompt),
+            keyEquivalent: ""
+        )
+        consentItem.target = self
+        consentItem.state = UserDefaults.standard.bool(
+            forKey: MenuController.skipConsentPromptKey
+        ) ? .off : .on
+        let deleteAudioItem = menu.addItem(
+            withTitle: "Delete audio after a clean transcript",
+            action: deleteAudioEnabled == nil
+                ? nil
+                : #selector(toggleDeleteAudio),
+            keyEquivalent: ""
+        )
+        deleteAudioItem.target = self
+        deleteAudioItem.state = deleteAudioEnabled == true ? .on : .off
+        deleteAudioItem.toolTip = "The audio is kept when the transcript "
+            + "failed, is empty or has warnings, so it can be transcribed "
+            + "again."
+        menu.addItem(.separator())
         menu.addItem(
             withTitle: "Quit MeetRec",
             action: #selector(quit),
@@ -287,6 +391,9 @@ final class MenuController: NSObject, @unchecked Sendable {
             )
             return
         }
+        guard confirmParticipantsInformed(language: preset.language) else {
+            return
+        }
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd'T'HH-mm-ss"
@@ -332,6 +439,81 @@ final class MenuController: NSObject, @unchecked Sendable {
                 title: "Could not start recording",
                 message: error.localizedDescription
             )
+        }
+    }
+
+    private func confirmParticipantsInformed(language: String) -> Bool {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: MenuController.skipConsentPromptKey) {
+            return true
+        }
+        let prompt = ConsentPrompt.forLanguage(language)
+        let alert = NSAlert()
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.message
+        alert.addButton(withTitle: prompt.record)
+        alert.addButton(withTitle: prompt.copyAndRecord)
+        alert.addButton(withTitle: prompt.cancel).keyEquivalent = "\u{1b}"
+        alert.showsSuppressionButton = true
+        alert.suppressionButton?.title = prompt.dontAsk
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            break
+        case .alertSecondButtonReturn:
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(prompt.notice, forType: .string)
+        default:
+            return false
+        }
+        if alert.suppressionButton?.state == .on {
+            defaults.set(true, forKey: MenuController.skipConsentPromptKey)
+            rebuildMenu()
+        }
+        return true
+    }
+
+    @objc private func toggleConsentPrompt() {
+        let defaults = UserDefaults.standard
+        let key = MenuController.skipConsentPromptKey
+        defaults.set(!defaults.bool(forKey: key), forKey: key)
+        rebuildMenu()
+    }
+
+    private func loadDeleteAudioSetting() {
+        DispatchQueue.global(qos: .utility).async { [self] in
+            let state = MenuController.controlOutput(
+                ["delete-audio"],
+                projectURL: projectURL,
+                pythonURL: pythonURL
+            )
+            DispatchQueue.main.async {
+                self.deleteAudioEnabled = state.map { $0 == "on" }
+                self.rebuildMenu()
+            }
+        }
+    }
+
+    @objc private func toggleDeleteAudio() {
+        guard let enabled = deleteAudioEnabled else { return }
+        DispatchQueue.global(qos: .utility).async { [self] in
+            let state = MenuController.controlOutput(
+                ["delete-audio", enabled ? "off" : "on"],
+                projectURL: projectURL,
+                pythonURL: pythonURL
+            )
+            DispatchQueue.main.async {
+                if let state {
+                    self.deleteAudioEnabled = state == "on"
+                    self.rebuildMenu()
+                } else {
+                    self.showAlert(
+                        title: "Could not change the setting",
+                        message: "Check ~/.config/meetrec/config.json."
+                    )
+                }
+            }
         }
     }
 

@@ -46,6 +46,10 @@ class TranscriptionConfig:
 class AppConfig:
     recordings_dir: Path
     on_stop: str | None = None
+    # Off by default: without the audio a session cannot be transcribed
+    # again, so deleting it has to be a choice. Even when on, audio is kept
+    # unless the transcript came out clean (see audio_deletion_blocker).
+    delete_audio_after_transcription: bool = False
     transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
 
 
@@ -120,5 +124,27 @@ def load_config(path: Path | None = None) -> AppConfig:
     return AppConfig(
         recordings_dir=recordings,
         on_stop=str(on_stop) if on_stop else None,
+        delete_audio_after_transcription=bool(
+            raw.get("delete_audio_after_transcription", False)
+        ),
         transcription=_merge_transcription(transcription_raw),
     )
+
+
+def set_config_value(path: Path | None, key: str, value: Any) -> None:
+    """Sets one top-level key, keeping everything else in the file."""
+    config_path = (path or CONFIG_PATH).expanduser()
+    raw: dict[str, Any] = {}
+    if config_path.exists():
+        loaded = json.loads(config_path.read_text(encoding="utf-8"))
+        if not isinstance(loaded, dict):
+            raise ValueError(f"Config root must be an object: {config_path}")
+        raw = loaded
+    raw[key] = value
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = config_path.with_name(f".{config_path.name}.tmp")
+    temporary.write_text(
+        json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, config_path)

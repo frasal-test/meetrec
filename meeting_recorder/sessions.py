@@ -297,6 +297,50 @@ def run_job(
     return JobResult(session_dir, "complete", attempts)
 
 
+def audio_deletion_blocker(session_dir: Path) -> str | None:
+    """Returns why the audio must be kept, or None when it is safe to delete.
+
+    Deleting the audio rules out a second transcription, so it happens only
+    after one that needs no second try: the job completed, the transcript
+    has text, and nothing was degraded along the way (a skipped speaker
+    separation is a warning, and a reason to run it again).
+    """
+    job_path = session_dir / JOB_FILE
+    if not job_path.exists() or read_json(job_path).get("state") != "complete":
+        return "the job is not complete"
+    transcript_path = session_dir / TRANSCRIPT_FILE
+    if not transcript_path.exists():
+        return "there is no transcript"
+    try:
+        transcript = read_json(transcript_path)
+    except (OSError, ValueError):
+        return "the transcript cannot be read"
+    if not transcript.get("segments"):
+        return "the transcript is empty"
+    if transcript.get("warnings"):
+        return "the transcript has warnings"
+    return None
+
+
+def delete_audio_if_clean(session_dir: Path) -> bool:
+    """Deletes the audio tracks after a clean transcription; True if it did."""
+    blocker = audio_deletion_blocker(session_dir)
+    if blocker is not None:
+        append_log(session_dir, f"Audio kept because {blocker}")
+        return False
+    meta_path = session_dir / META_FILE
+    meta = read_json(meta_path)
+    for path in track_paths(session_dir, meta).values():
+        path.unlink(missing_ok=True)
+    audio_dir = session_dir / "audio"
+    if audio_dir.is_dir() and not any(audio_dir.iterdir()):
+        audio_dir.rmdir()
+    meta["audio_deleted_at"] = utc_now()
+    atomic_write_json(meta_path, meta)
+    append_log(session_dir, "Audio deleted after a clean transcription")
+    return True
+
+
 def pending_sessions(
     recordings_dir: Path,
     requested: Path | None = None,
