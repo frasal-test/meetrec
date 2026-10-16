@@ -847,7 +847,7 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
     if major < 4:
         raise DiarizationUnavailable(
             f"pyannote.audio {version} is installed; 4.x is required. "
-            "Run .venv/bin/pip install -U -r requirements-diarization.txt."
+            "Run .venv/bin/python -m pip install -U -r requirements-diarization.txt."
         )
 
     token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")

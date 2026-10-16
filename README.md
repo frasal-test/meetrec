@@ -58,8 +58,8 @@ Requirements:
    git clone https://github.com/frasal-test/meetrec.git
    cd meetrec
    python3.12 -m venv .venv
-   .venv/bin/pip install -U pip
-   .venv/bin/pip install -r requirements-diarization.txt
+   .venv/bin/python -m pip install -U pip
+   .venv/bin/python -m pip install -r requirements-diarization.txt
    ```
 
 4. Get a token at <https://huggingface.co/settings/tokens> (a Read token; a fine-grained token needs "Read access to contents of all public gated repos you can access"). While signed in, accept the conditions on all three models:
@@ -103,7 +103,7 @@ mkdir -p ~/.config/meetrec
 echo '{"transcription": {"diarize_system": false}}' > ~/.config/meetrec/config.json
 ```
 
-Updating later: run `git pull`, then `.venv/bin/pip install -U -r requirements-diarization.txt` (`requirements.txt` without speaker separation), then `./meetrec.sh install`.
+Updating later: run `git pull`, then `.venv/bin/python -m pip install -U -r requirements-diarization.txt` (`requirements.txt` without speaker separation), then `./meetrec.sh install`.
 
 Wear headphones, otherwise your microphone picks up the other participants and they are transcribed twice.
 

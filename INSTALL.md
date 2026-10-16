@@ -183,17 +183,17 @@ python3.12 -m venv .venv
 This prints nothing when it works.
 
 ```bash
-.venv/bin/pip install -U pip
+.venv/bin/python -m pip install -U pip
 ```
 
 This updates the installer itself and ends with `Successfully installed pip-…`
 (or `Requirement already satisfied` if it was current).
 
 Intel Mac (`uname -m` printed `x86_64`)? Run
-`.venv/bin/pip install -r requirements.txt` instead and skip the next command.
+`.venv/bin/python -m pip install -r requirements.txt` instead and skip the next command.
 
 ```bash
-.venv/bin/pip install -r requirements-diarization.txt
+.venv/bin/python -m pip install -r requirements-diarization.txt
 ```
 
 This one is slow — several minutes and about 1 GB, most of it PyTorch. You
@@ -544,11 +544,11 @@ rm -rf .venv && python3.12 -m venv .venv
 ```
 
 ```bash
-.venv/bin/pip install -U pip
+.venv/bin/python -m pip install -U pip
 ```
 
 ```bash
-.venv/bin/pip install -r requirements-diarization.txt
+.venv/bin/python -m pip install -r requirements-diarization.txt
 ```
 
 ### doctor shows ✗ Apple Silicon
@@ -565,7 +565,7 @@ The line says which: `missing — install requirements-diarization.txt`, or
 `version 3.x — 4.x required`. Install the full set:
 
 ```bash
-.venv/bin/pip install -r requirements-diarization.txt
+.venv/bin/python -m pip install -r requirements-diarization.txt
 ```
 
 or turn speaker separation off, as described in
@@ -722,7 +722,7 @@ transcribe faster.
 on Intel, so install the smaller set in Step 5 instead:
 
 ```bash
-.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 Then turn the feature off by creating the configuration file:
@@ -760,7 +760,7 @@ Update the Python packages (use `requirements.txt` instead if you run without
 speaker separation):
 
 ```bash
-.venv/bin/pip install -U -r requirements-diarization.txt
+.venv/bin/python -m pip install -U -r requirements-diarization.txt
 ```
 
 ```bash

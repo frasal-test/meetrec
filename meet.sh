@@ -20,7 +20,7 @@ WAIT_FOR_TRANSCRIPT="${WAIT_FOR_TRANSCRIPT:-0}"
 
 if [[ ! -x "$VENV_PYTHON" ]]; then
     echo "Missing Python environment: $SCRIPT_DIR/.venv" >&2
-    echo "Run: python3.12 -m venv .venv && .venv/bin/pip install -r requirements-diarization.txt" >&2
+    echo "Run: python3.12 -m venv .venv && .venv/bin/python -m pip install -r requirements-diarization.txt" >&2
     exit 1
 fi
 # `python -m meeting_recorder.…` resolves the package against the working
