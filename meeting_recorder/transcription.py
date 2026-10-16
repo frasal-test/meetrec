@@ -808,6 +808,14 @@ def load_pyannote_pipeline(pipeline_class: object, model_name: str, token: str |
         )
 
 
+def disable_pyannote_telemetry() -> None:
+    # pyannote.audio 4 reports usage (pipeline name, audio duration, speaker
+    # counts) to otel.pyannote.ai unless told otherwise before it is imported.
+    # MeetRec promises that nothing leaves the Mac; setdefault keeps an
+    # explicit opt-in from the environment or .env.
+    os.environ.setdefault("PYANNOTE_METRICS_ENABLED", "false")
+
+
 def load_diarizer(args: argparse.Namespace) -> object | None:
     if not args.diarize:
         return None
@@ -817,6 +825,7 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
     # apart from the rest and let the caller finish without speaker labels.
     # Anything else — a dropped connection, an exhausted disk — still escapes,
     # because there the retry is the whole point.
+    disable_pyannote_telemetry()
     try:
         from pyannote.audio import Pipeline
     except ImportError as exc:
@@ -837,9 +846,9 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
                 "check HF_TOKEN in .env and accept the model conditions."
             ) from exc
         raise
-    # pyannote.audio 3.x - what pip installs on Python 3.9 - does not raise
-    # for a gated or unknown repository: it prints advice and returns None.
-    # That is the same refused token as above, so it settles the same way.
+    # pyannote can answer a gated or unknown repository by printing advice and
+    # returning None instead of raising. That is the same refused token as
+    # above, so it settles the same way.
     if pipeline is None:
         raise DiarizationUnavailable(
             f"the Hugging Face token cannot access {args.diarization_model}; "

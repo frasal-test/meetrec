@@ -1,5 +1,4 @@
 {
-  "recordings_dir": "~/Recordings/MeetRec",
   "on_stop": null,
   "transcription": {
     "enabled": true,

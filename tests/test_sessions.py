@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.metadata
 import importlib.util
 import io
 import json
@@ -17,6 +18,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from meeting_recorder.transcription import (
+    disable_pyannote_telemetry,
     load_diarizer,
     DiarizationTurn,
     DiarizationUnavailable,
@@ -41,6 +43,7 @@ from meeting_recorder.config import (
     load_config,
 )
 from meeting_recorder.control import main as control_main
+from meeting_recorder.control import pyannote_version_check
 from meeting_recorder.session_transcription import (
     SessionProcessor,
     merge_track_transcripts,
@@ -686,6 +689,48 @@ class RecordingsDirTests(unittest.TestCase):
                     with contextlib.redirect_stdout(stdout):
                         self.assertEqual(control_main(), 0)
             self.assertEqual(stdout.getvalue(), "/from/file\n")
+
+
+class PyannoteTelemetryTests(unittest.TestCase):
+    def test_disabled_when_unset(self) -> None:
+        with mock.patch.dict(os.environ, clear=True):
+            disable_pyannote_telemetry()
+            self.assertEqual(os.environ["PYANNOTE_METRICS_ENABLED"], "false")
+
+    def test_explicit_opt_in_is_kept(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"PYANNOTE_METRICS_ENABLED": "true"}, clear=True
+        ):
+            disable_pyannote_telemetry()
+            self.assertEqual(os.environ["PYANNOTE_METRICS_ENABLED"], "true")
+
+
+class DoctorPyannoteVersionTests(unittest.TestCase):
+    def check(self, version: str | None) -> tuple[bool, str]:
+        if version is None:
+            effect = importlib.metadata.PackageNotFoundError("pyannote.audio")
+            patched = mock.patch(
+                "importlib.metadata.version", side_effect=effect
+            )
+        else:
+            patched = mock.patch(
+                "importlib.metadata.version", return_value=version
+            )
+        with patched:
+            return pyannote_version_check()
+
+    def test_version_4_passes(self) -> None:
+        self.assertEqual(self.check("4.0.1"), (True, "version 4.0.1"))
+
+    def test_version_3_is_too_old(self) -> None:
+        self.assertEqual(
+            self.check("3.1.1"), (False, "version 3.1.1 — 4.x required")
+        )
+
+    def test_missing_package_fails(self) -> None:
+        passed, detail = self.check(None)
+        self.assertFalse(passed)
+        self.assertIn("requirements-diarization.txt", detail)
 
 
 if __name__ == "__main__":

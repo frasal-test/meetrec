@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import importlib.metadata
 import importlib.util
 import json
 import os
@@ -13,7 +14,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .config import CONFIG_PATH, load_config
-from .transcription import load_env_files
+from .transcription import disable_pyannote_telemetry, load_env_files
 from .session_transcription import SessionProcessor
 from .sessions import (
     enqueue_session,
@@ -23,6 +24,15 @@ from .sessions import (
     run_job,
 )
 
+
+# pyannote.audio 4 needs Python 3.10, and these three gated repositories must
+# have their conditions accepted by the token's account. The fourth model it
+# loads (wespeaker) is not gated.
+PYANNOTE_GATED_REPOS = (
+    "pyannote/segmentation-3.0",
+    "pyannote/speaker-diarization-3.1",
+    "pyannote/speaker-diarization-community-1",
+)
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 RECORDER_BINARY = PROJECT_DIR / ".recorder"
@@ -105,6 +115,45 @@ def requested_options(args: argparse.Namespace) -> dict[str, object]:
     return options
 
 
+def pyannote_version_check() -> tuple[bool, str]:
+    try:
+        installed = importlib.metadata.version("pyannote.audio")
+    except importlib.metadata.PackageNotFoundError:
+        return False, "missing — install requirements-diarization.txt"
+    try:
+        major = int(installed.split(".", 1)[0])
+    except ValueError:
+        major = 0
+    if major >= 4:
+        return True, f"version {installed}"
+    return False, f"version {installed} — 4.x required"
+
+
+def model_access_check(repo: str, token: str) -> tuple[bool, str]:
+    from huggingface_hub import auth_check
+    from huggingface_hub.errors import (
+        GatedRepoError,
+        HfHubHTTPError,
+        RepositoryNotFoundError,
+    )
+
+    try:
+        auth_check(repo, token=token)
+    except GatedRepoError:
+        # Before RepositoryNotFoundError: it is a subclass of that one.
+        return False, f"accept the conditions at https://huggingface.co/{repo}"
+    except RepositoryNotFoundError:
+        return False, "token rejected"
+    except HfHubHTTPError as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        if status == 401:
+            return False, "token rejected"
+        return False, f"could not check: {type(exc).__name__}"
+    except Exception as exc:
+        return False, f"could not check: {type(exc).__name__}"
+    return True, "ok"
+
+
 def doctor(config_path: Path) -> int:
     config = load_config(config_path)
     checks: list[tuple[str, bool, str]] = []
@@ -120,6 +169,10 @@ def doctor(config_path: Path) -> int:
     checks.append(
         ("Menu bar binary", MENUBAR_BINARY.is_file(), str(MENUBAR_BINARY))
     )
+    python_version = ".".join(str(part) for part in sys.version_info[:3])
+    checks.append(
+        ("Python 3.10+", sys.version_info >= (3, 10), python_version)
+    )
     checks.append(
         (
             "faster-whisper",
@@ -128,23 +181,31 @@ def doctor(config_path: Path) -> int:
         )
     )
     if config.transcription.diarize_system:
+        machine = platform.machine()
         checks.append(
             (
-                "pyannote.audio",
-                importlib.util.find_spec("pyannote.audio") is not None,
-                "required by diarize_system=true",
+                "Apple Silicon",
+                machine == "arm64",
+                "required for speaker separation"
+                if machine == "arm64"
+                else machine,
             )
         )
+        disable_pyannote_telemetry()
+        pyannote_ok, pyannote_detail = pyannote_version_check()
+        checks.append(("pyannote.audio", pyannote_ok, pyannote_detail))
+        token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
         checks.append(
             (
                 "Hugging Face token",
-                bool(
-                    os.getenv("HF_TOKEN")
-                    or os.getenv("HUGGINGFACE_TOKEN")
-                ),
+                bool(token),
                 "HF_TOKEN or HUGGINGFACE_TOKEN",
             )
         )
+        if token and pyannote_ok:
+            for repo in PYANNOTE_GATED_REPOS:
+                passed, detail = model_access_check(repo, token)
+                checks.append((f"Model access: {repo}", passed, detail))
 
     config.recordings_dir.mkdir(parents=True, exist_ok=True)
     checks.append(
