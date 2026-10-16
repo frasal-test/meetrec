@@ -2,7 +2,7 @@
 # Record a meeting into two persistent tracks and enqueue transcription.
 #
 # Usage:
-#   ./meet.sh                    # Italian, system-track diarization
+#   ./meet.sh                    # Italian, speaker separation as configured
 #   ./meet.sh en                 # English
 #   ./meet.sh es nodiar          # Spanish, deterministic ME/REMOTE labels
 #   ./meet.sh auto nodiar        # Automatic language detection
@@ -10,7 +10,7 @@
 set -euo pipefail
 
 MEETING_LANG="${1:-it}"
-DIARIZE="${2:-diar}"
+DIARIZE="${2:-}"
 NUM_SPEAKERS="${3:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECORDER_BINARY="$SCRIPT_DIR/.recorder"
@@ -20,7 +20,7 @@ WAIT_FOR_TRANSCRIPT="${WAIT_FOR_TRANSCRIPT:-0}"
 
 if [[ ! -x "$VENV_PYTHON" ]]; then
     echo "Missing Python environment: $SCRIPT_DIR/.venv" >&2
-    echo "Run: python3 -m venv .venv && .venv/bin/pip install -r requirements-diarization.txt" >&2
+    echo "Run: python3.12 -m venv .venv && .venv/bin/python -m pip install -r requirements-diarization.txt" >&2
     exit 1
 fi
 # `python -m meeting_recorder.…` resolves the package against the working
@@ -33,7 +33,7 @@ if [[ "$MEETING_LANG" != "it" && "$MEETING_LANG" != "en" && "$MEETING_LANG" != "
     echo "Usage: $0 [it|en|es|auto] [diar|nodiar] [num_speakers]" >&2
     exit 1
 fi
-if [[ "$DIARIZE" != "diar" && "$DIARIZE" != "nodiar" ]]; then
+if [[ -n "$DIARIZE" && "$DIARIZE" != "diar" && "$DIARIZE" != "nodiar" ]]; then
     echo "Usage: $0 [it|en|es|auto] [diar|nodiar] [num_speakers]" >&2
     exit 1
 fi
@@ -59,7 +59,7 @@ SESSION_DIR="$RECORDINGS_DIR/$TIMESTAMP"
 mkdir -p "$SESSION_DIR"
 
 echo ""
-echo "  Lingua: $MEETING_LANG | Modello: $MODEL | Diarizzazione system: $DIARIZE"
+echo "  Lingua: $MEETING_LANG | Modello: $MODEL | Diarizzazione system: ${DIARIZE:-config}"
 echo "  Sessione: $SESSION_DIR"
 echo "  ● Registrazione in corso — premi Invio per fermare"
 echo ""
@@ -77,9 +77,10 @@ CONTROL_ARGS=(
     --model "$MODEL"
     --language "$MEETING_LANG"
 )
+# Only an explicit diar/nodiar overrides the config file.
 if [[ "$DIARIZE" == "diar" ]]; then
     CONTROL_ARGS+=(--diarize-system)
-else
+elif [[ "$DIARIZE" == "nodiar" ]]; then
     CONTROL_ARGS+=(--no-diarize-system)
 fi
 if [[ -n "$NUM_SPEAKERS" ]]; then

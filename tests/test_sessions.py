@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.metadata
+import importlib.util
 import io
 import json
 import os
 import struct
 import sys
 import tempfile
+import threading
+import types
 import unittest
 import wave
 from pathlib import Path
@@ -15,6 +19,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 from meeting_recorder.transcription import (
+    disable_pyannote_telemetry,
+    load_diarizer,
     DiarizationTurn,
     DiarizationUnavailable,
     SPEECH_GAIN_LIMITS_DB,
@@ -38,6 +44,7 @@ from meeting_recorder.config import (
     load_config,
 )
 from meeting_recorder.control import main as control_main
+from meeting_recorder.control import model_access_check, pyannote_version_check
 from meeting_recorder.session_transcription import (
     SessionProcessor,
     merge_track_transcripts,
@@ -54,6 +61,10 @@ from meeting_recorder.sessions import (
 
 
 class DiarizationAudioTests(unittest.TestCase):
+    # torch arrives with requirements-diarization.txt only.
+    @unittest.skipUnless(
+        importlib.util.find_spec("torch"), "needs requirements-diarization.txt"
+    )
     def test_normalized_wav_is_passed_as_waveform(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "audio.wav"
@@ -404,6 +415,48 @@ class DegradedDiarizationTests(unittest.TestCase):
 
         self.assertEqual(processor.warnings, [])
 
+    def test_a_pipeline_pyannote_declined_to_load_degrades(self) -> None:
+        # pyannote.audio 3.x answers a refused token with None, not an error.
+        pyannote = types.ModuleType("pyannote")
+        audio = types.ModuleType("pyannote.audio")
+        audio.__version__ = "4.0.7"
+        audio.Pipeline = mock.Mock(**{"from_pretrained.return_value": None})
+        pyannote.audio = audio
+        args = argparse.Namespace(
+            diarize=True,
+            hf_token="hf_refused",
+            diarization_model="pyannote/speaker-diarization-3.1",
+            diarization_device="cpu",
+        )
+        with mock.patch.dict(
+            sys.modules,
+            {"pyannote": pyannote, "pyannote.audio": audio},
+        ):
+            with self.assertRaises(DiarizationUnavailable):
+                load_diarizer(args)
+
+    def test_pyannote_3_is_refused_as_settled(self) -> None:
+        # 3.x fails against huggingface_hub 1.x on every attempt; retrying
+        # cannot help, so it must degrade instead of failing the job.
+        pyannote = types.ModuleType("pyannote")
+        audio = types.ModuleType("pyannote.audio")
+        audio.__version__ = "3.4.0"
+        audio.Pipeline = mock.Mock()
+        pyannote.audio = audio
+        args = argparse.Namespace(
+            diarize=True,
+            hf_token="hf_token",
+            diarization_model="pyannote/speaker-diarization-3.1",
+            diarization_device="cpu",
+        )
+        with mock.patch.dict(
+            sys.modules,
+            {"pyannote": pyannote, "pyannote.audio": audio},
+        ):
+            with self.assertRaisesRegex(DiarizationUnavailable, "4.x is required"):
+                load_diarizer(args)
+        audio.Pipeline.from_pretrained.assert_not_called()
+
     def test_the_warning_reaches_every_readable_output(self) -> None:
         warning = "Speaker separation was skipped. Everyone is REMOTE."
         transcript = Transcript(
@@ -660,6 +713,71 @@ class RecordingsDirTests(unittest.TestCase):
                     with contextlib.redirect_stdout(stdout):
                         self.assertEqual(control_main(), 0)
             self.assertEqual(stdout.getvalue(), "/from/file\n")
+
+
+class PyannoteTelemetryTests(unittest.TestCase):
+    def test_disabled_when_unset(self) -> None:
+        with mock.patch.dict(os.environ, clear=True):
+            disable_pyannote_telemetry()
+            self.assertEqual(os.environ["PYANNOTE_METRICS_ENABLED"], "false")
+
+    def test_explicit_opt_in_is_kept(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"PYANNOTE_METRICS_ENABLED": "true"}, clear=True
+        ):
+            disable_pyannote_telemetry()
+            self.assertEqual(os.environ["PYANNOTE_METRICS_ENABLED"], "true")
+
+
+class DoctorPyannoteVersionTests(unittest.TestCase):
+    def check(self, version: str | None) -> tuple[bool, str]:
+        if version is None:
+            effect = importlib.metadata.PackageNotFoundError("pyannote.audio")
+            patched = mock.patch(
+                "importlib.metadata.version", side_effect=effect
+            )
+        else:
+            patched = mock.patch(
+                "importlib.metadata.version", return_value=version
+            )
+        with patched:
+            return pyannote_version_check()
+
+    def test_version_4_passes(self) -> None:
+        self.assertEqual(self.check("4.0.1"), (True, "version 4.0.1"))
+
+    def test_version_3_is_too_old(self) -> None:
+        self.assertEqual(
+            self.check("3.1.1"), (False, "version 3.1.1 — 4.x required")
+        )
+
+    def test_missing_package_fails(self) -> None:
+        passed, detail = self.check(None)
+        self.assertFalse(passed)
+        self.assertIn("requirements-diarization.txt", detail)
+
+    def test_the_underscore_spelling_is_found(self) -> None:
+        def version(name: str) -> str:
+            if name == "pyannote_audio":
+                return "4.0.7"
+            raise importlib.metadata.PackageNotFoundError(name)
+
+        with mock.patch("importlib.metadata.version", side_effect=version):
+            self.assertEqual(pyannote_version_check(), (True, "version 4.0.7"))
+
+
+class DoctorModelAccessTests(unittest.TestCase):
+    def test_a_hung_check_times_out(self) -> None:
+        release = threading.Event()
+        with mock.patch(
+            "meeting_recorder.control._model_access_check",
+            side_effect=lambda repo, token: release.wait(5),
+        ), mock.patch(
+            "meeting_recorder.control.MODEL_ACCESS_TIMEOUT_SECONDS", 0.05
+        ):
+            result = model_access_check("pyannote/x", "hf_token")
+        release.set()
+        self.assertEqual(result, (False, "could not check: timed out"))
 
 
 if __name__ == "__main__":
