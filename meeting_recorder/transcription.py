@@ -837,6 +837,14 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
                 "check HF_TOKEN in .env and accept the model conditions."
             ) from exc
         raise
+    # pyannote.audio 3.x - what pip installs on Python 3.9 - does not raise
+    # for a gated or unknown repository: it prints advice and returns None.
+    # That is the same refused token as above, so it settles the same way.
+    if pipeline is None:
+        raise DiarizationUnavailable(
+            f"the Hugging Face token cannot access {args.diarization_model}; "
+            "check HF_TOKEN in .env and accept the model conditions."
+        )
 
     import torch
 

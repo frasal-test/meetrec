@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import io
 import json
 import os
 import struct
 import sys
 import tempfile
+import types
 import unittest
 import wave
 from pathlib import Path
@@ -15,6 +17,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from meeting_recorder.transcription import (
+    load_diarizer,
     DiarizationTurn,
     DiarizationUnavailable,
     SPEECH_GAIN_LIMITS_DB,
@@ -54,6 +57,10 @@ from meeting_recorder.sessions import (
 
 
 class DiarizationAudioTests(unittest.TestCase):
+    # torch arrives with requirements-diarization.txt only.
+    @unittest.skipUnless(
+        importlib.util.find_spec("torch"), "needs requirements-diarization.txt"
+    )
     def test_normalized_wav_is_passed_as_waveform(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "audio.wav"
@@ -403,6 +410,25 @@ class DegradedDiarizationTests(unittest.TestCase):
                 processor.diarizer()
 
         self.assertEqual(processor.warnings, [])
+
+    def test_a_pipeline_pyannote_declined_to_load_degrades(self) -> None:
+        # pyannote.audio 3.x answers a refused token with None, not an error.
+        pyannote = types.ModuleType("pyannote")
+        audio = types.ModuleType("pyannote.audio")
+        audio.Pipeline = mock.Mock(**{"from_pretrained.return_value": None})
+        pyannote.audio = audio
+        args = argparse.Namespace(
+            diarize=True,
+            hf_token="hf_refused",
+            diarization_model="pyannote/speaker-diarization-3.1",
+            diarization_device="cpu",
+        )
+        with mock.patch.dict(
+            sys.modules,
+            {"pyannote": pyannote, "pyannote.audio": audio},
+        ):
+            with self.assertRaises(DiarizationUnavailable):
+                load_diarizer(args)
 
     def test_the_warning_reaches_every_readable_output(self) -> None:
         warning = "Speaker separation was skipped. Everyone is REMOTE."
