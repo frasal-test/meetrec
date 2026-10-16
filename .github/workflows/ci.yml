@@ -28,6 +28,7 @@ jobs:
         run: |
           bash -n meetrec.sh
           bash -n meet.sh
+          bash -n setup.sh
 
       # No "MeetRec Dev" certificate on the runner, so this exercises the
       # ad-hoc fallback; the build itself is the same.

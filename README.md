@@ -24,7 +24,7 @@ MeetRec keeps everything on your Mac and records you and the other participants 
 - Menu bar app with language presets, elapsed timer, transcription progress and a macOS notification when a transcript is ready. Optional LaunchAgent to start it at login.
 - Terminal recorder: `./meet.sh`.
 - Persistent job queue with retries and recovery of interrupted jobs.
-- Outputs: TXT, SRT, JSON, Markdown, per-speaker text, and RTTM when diarization ran.
+- Outputs: Markdown and per-speaker text to read and share, plus TXT, SRT, JSON, and RTTM when diarization ran; see [Which file to use](#which-file-to-use).
 - Optional `on_stop` hook that runs after the transcript is written.
 - `doctor` command to check the installation: Python version, Apple Silicon, pyannote 4 and access to its models.
 
@@ -34,10 +34,36 @@ Requirements:
 
 - Apple Silicon Mac. Intel Macs can transcribe but not separate speakers; see [Intel Macs](INSTALL.md#running-without-speaker-separation)
 - macOS 13 or later
-- Xcode Command Line Tools (MeetRec compiles its Swift code locally; there is no prebuilt binary)
-- Python 3.10 to 3.13, 3.12 recommended. The `python3` bundled with the Command Line Tools is 3.9 and too old
-- A Hugging Face read token, for remote-speaker diarization only
-- About 4 GB of free disk (plus the Command Line Tools) and about 20 minutes
+- About 4 GB of free disk (plus several GB for Apple's Command Line Tools if you do not have them) and about 20 minutes
+
+**Before you start (optional, saves waiting):** to tell remote participants apart, MeetRec needs a free Hugging Face token. Getting one takes a few minutes in the browser:
+
+1. Create an account at <https://huggingface.co/join>.
+2. While signed in, accept the conditions on all three models: [segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0), [speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1), [speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1).
+3. At <https://huggingface.co/settings/tokens>, create a token of type **Read** and copy it (it starts with `hf_`).
+
+Without it ready, setup opens these pages for you and asks for the token after the long downloads, or you can skip it and add it later.
+
+### One command
+
+Open Terminal (`Cmd + Space`, type `Terminal`, Enter), paste this line and press Enter:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/frasal-test/meetrec/main/setup.sh)"
+```
+
+[`setup.sh`](setup.sh) downloads MeetRec into `~/meetrec` and does every step below: Command Line Tools, Python (through [uv](https://docs.astral.sh/uv/) when no suitable one is installed), the Python packages, the token, the signing certificate, the build, the LaunchAgent and a final `doctor`. It talks in Italian on a Mac set to Italian and in English otherwise. You only act when macOS or Hugging Face require a person:
+
+- click **Install** on the Command Line Tools dialog, if they are missing;
+- paste the Hugging Face token, if you want speaker separation;
+- type your Mac password when macOS asks to trust the signing certificate, and click **Always Allow** when `codesign` asks to use it;
+- allow the Microphone and switch MeetRec on under Screen & System Audio Recording; setup tells you when and opens the right page.
+
+Running the same line again updates MeetRec, and adds speaker separation if you skipped it. From inside a copy of the project, `./setup.sh` does the same without downloading it.
+
+### By hand
+
+The steps `setup.sh` automates, for those who want to see each one. [INSTALL.md](INSTALL.md) has them one at a time, with expected output and troubleshooting.
 
 1. Install the Command Line Tools first; without them `git` and `python3` are stubs. Wait for the installer to finish; an "already installed" error is fine.
 
@@ -104,11 +130,9 @@ mkdir -p ~/.config/meetrec
 echo '{"transcription": {"diarize_system": false}}' > ~/.config/meetrec/config.json
 ```
 
-Updating later: run `git pull`, then `.venv/bin/python -m pip install -U -r requirements-diarization.txt` (`requirements.txt` without speaker separation), then `./meetrec.sh install`.
+Updating later: run the setup command again, or by hand `git pull`, then `.venv/bin/python -m pip install -U -r requirements-diarization.txt` (`requirements.txt` without speaker separation), then `./meetrec.sh install`.
 
 Wear headphones, otherwise your microphone picks up the other participants and they are transcribed twice.
-
-[INSTALL.md](INSTALL.md) has the same steps one at a time, with expected output and troubleshooting.
 
 ## Usage
 
@@ -180,6 +204,21 @@ recordings/
 ```
 
 The default location is `recordings/` in the project folder; see [Configuration](#configuration) before changing it.
+
+### Which file to use
+
+Two files are meant for people, and they hold the same conversation:
+
+| You want to | Use | Looks like |
+| --- | --- | --- |
+| Read the meeting | `transcripts/transcript.md` | Speaker and time as a heading, then what they said. Opens nicely in any Markdown viewer. |
+| Paste it into a document, an email or an AI assistant for minutes | `transcripts/transcript.speakers.txt` | One line per turn: `[00:00:05.300 - 00:00:09.100] REMOTE_01: Sure. We are on track…` |
+
+Both are the same with or without speaker separation; only the labels change. With it, remote participants are `REMOTE_01`, `REMOTE_02`, and so on; without it they are all `REMOTE`. Your voice is always `ME`.
+
+**`transcript.txt` is not the one to share:** it is the bare text, with no speakers and no times, so you cannot tell who said what. The rest are for tools: `transcript.srt` subtitles a video player, `transcript.json` carries everything (word timings, tracks, warnings) for scripts and `on_stop` hooks, and `transcript.rttm` is the raw speaker separation for diarization tools.
+
+When something was switched off, for example speaker separation because the token was refused, the transcript still comes out complete and `transcript.md` and `transcript.speakers.txt` start with a line saying so.
 
 Example of `transcript.md` (illustrative, not a real recording):
 

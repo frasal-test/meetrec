@@ -7,6 +7,20 @@ goes wrong.
 
 Follow the steps in order. Later steps depend on earlier ones.
 
+**The quick way.** One command does every step below for you and stops only
+where you have to click or type something. Open Terminal (see the next section),
+paste this line and press Enter:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/frasal-test/meetrec/main/setup.sh)"
+```
+
+It asks about the Hugging Face token (Step 6) first, so you can create it in the
+browser while the long downloads run. The rest of this guide is the same work
+done by hand, and the place to look when setup reports a problem: each message
+names the step it belongs to. Running the command again is safe; it also
+updates MeetRec.
+
 **What you need.** A Mac with Apple Silicon (M1 or later), macOS 13 or later,
 and a free Hugging Face account for speaker separation. On an Intel Mac you can
 still transcribe, but not tell remote speakers apart; follow the steps below and
@@ -489,10 +503,14 @@ Choose **Open recordings** from the MeetRec menu, or look in `~/meetrec/recordin
 is a folder named after its start time, for example
 `2026-07-29T10-30-00/`, containing:
 
-- `transcripts/transcript.md` — the readable transcript; start here.
-- `transcripts/transcript.txt`, `.srt`, `.json` — plain text, subtitles, and the
-  full structured output with timings and speakers.
-- `transcripts/transcript.speakers.txt` — grouped by speaker.
+- `transcripts/transcript.md` — the transcript to read, with who spoke and
+  when; start here.
+- `transcripts/transcript.speakers.txt` — the same conversation as plain text,
+  one line per speaker turn. This is the file to paste into a document, an
+  email or an AI assistant.
+- `transcripts/transcript.txt` — the bare text **without speakers**, so not the
+  one to share. `.srt` (subtitles), `.json` (everything, for scripts) and
+  `.rttm` (raw speaker separation) are for other programs.
 - `audio/mic.caf` and `audio/system.caf` — your voice and everyone else's, kept
   as separate recordings. They stay unless you tick **Delete audio after a
   clean transcript** in the MeetRec menu; then `audio/` is deleted once a
@@ -790,6 +808,13 @@ restart; it follows the configuration unless you pass `nodiar` (off) or `diar`
 
 ## Updating MeetRec
 
+Run the setup command from [the quick way](#installing-meetrec-step-by-step)
+again. It pulls the new version, updates the packages, rebuilds and checks.
+When MeetRec has recorded before, answer yes to its permissions question to
+skip that part.
+
+By hand:
+
 ```bash
 cd ~/meetrec
 ```
@@ -844,6 +869,8 @@ a clean Mac:
   `defaults delete com.frasal.meetrec.menubar`.
 - The `MeetRec Dev` certificate: in Keychain Access, open the login keychain,
   My Certificates, and delete it if you no longer need it.
+- If setup installed Python through uv: `~/.local/bin/uv`, `~/.local/bin/uvx`
+  and `~/.local/share/uv`. Leave them if you use uv for anything else.
 
 You can also remove MeetRec from System Settings → Privacy & Security
 (Microphone and Screen & System Audio Recording).
