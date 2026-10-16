@@ -14,8 +14,8 @@ DIARIZE="${2:-diar}"
 NUM_SPEAKERS="${3:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECORDER_BINARY="$SCRIPT_DIR/.recorder"
-RECORDINGS_DIR="${RECORDINGS_DIR:-$SCRIPT_DIR/recordings}"
 VENV_PYTHON="$SCRIPT_DIR/.venv/bin/python"
+CONFIG_PATH="${MEETREC_CONFIG:-$HOME/.config/meetrec/config.json}"
 WAIT_FOR_TRANSCRIPT="${WAIT_FOR_TRANSCRIPT:-0}"
 
 if [[ ! -x "$VENV_PYTHON" ]]; then
@@ -23,6 +23,12 @@ if [[ ! -x "$VENV_PYTHON" ]]; then
     echo "Run: python3 -m venv .venv && .venv/bin/pip install -r requirements-diarization.txt" >&2
     exit 1
 fi
+# `python -m meeting_recorder.…` resolves the package against the working
+# directory, and this script can be run from anywhere.
+export PYTHONPATH="$SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}"
+# The Python config is the single source of truth for where recordings live,
+# so the worker scans the same place this script records into.
+RECORDINGS_DIR="$("$VENV_PYTHON" -m meeting_recorder.control --config "$CONFIG_PATH" recordings-dir)"
 if [[ "$MEETING_LANG" != "it" && "$MEETING_LANG" != "en" && "$MEETING_LANG" != "es" && "$MEETING_LANG" != "auto" ]]; then
     echo "Usage: $0 [it|en|es|auto] [diar|nodiar] [num_speakers]" >&2
     exit 1
@@ -66,7 +72,7 @@ if [[ ! -s "$SESSION_DIR/audio/mic.caf" && ! -s "$SESSION_DIR/audio/system.caf" 
 fi
 
 CONTROL_ARGS=(
-    --config "${MEETREC_CONFIG:-$HOME/.config/meetrec/config.json}"
+    --config "$CONFIG_PATH"
     enqueue "$SESSION_DIR"
     --model "$MODEL"
     --language "$MEETING_LANG"
@@ -85,12 +91,12 @@ fi
 echo ""
 if [[ "$WAIT_FOR_TRANSCRIPT" == "1" ]]; then
     "$VENV_PYTHON" -m meeting_recorder.control \
-        --config "${MEETREC_CONFIG:-$HOME/.config/meetrec/config.json}" \
+        --config "$CONFIG_PATH" \
         worker --once
     echo "  ✓ Trascrizione completata: $SESSION_DIR/transcripts/transcript.md"
 else
     nohup "$VENV_PYTHON" -m meeting_recorder.control \
-        --config "${MEETREC_CONFIG:-$HOME/.config/meetrec/config.json}" \
+        --config "$CONFIG_PATH" \
         worker --once \
         >>"$SESSION_DIR/transcribe.log" 2>&1 &
     WORKER_PID=$!

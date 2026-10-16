@@ -73,14 +73,49 @@ final class MenuController: NSObject, @unchecked Sendable {
 
     init(projectURL: URL) {
         self.projectURL = projectURL
-        self.recordingsURL = ProcessInfo.processInfo.environment[
-            "RECORDINGS_DIR"
-        ].map { URL(fileURLWithPath: $0, isDirectory: true) }
-            ?? projectURL.appendingPathComponent("recordings", isDirectory: true)
-        self.pythonURL = projectURL.appendingPathComponent(".venv/bin/python")
+        let pythonURL = projectURL.appendingPathComponent(".venv/bin/python")
+        self.pythonURL = pythonURL
+        self.recordingsURL = MenuController.resolveRecordingsURL(
+            projectURL: projectURL,
+            pythonURL: pythonURL
+        )
         super.init()
         configureMenu()
         resumePendingTranscriptions()
+    }
+
+    /// The worker scans the directory the Python config names, so recording
+    /// anywhere else leaves sessions it never finds. Ask Python rather than
+    /// re-implement the precedence here; fall back to the old guess only when
+    /// it cannot answer.
+    private static func resolveRecordingsURL(
+        projectURL: URL,
+        pythonURL: URL
+    ) -> URL {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = pythonURL
+        process.arguments = [
+            "-m", "meeting_recorder.control", "recordings-dir",
+        ]
+        process.currentDirectoryURL = projectURL
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            if process.terminationStatus == 0,
+               let text = String(data: data, encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !text.isEmpty
+            {
+                return URL(fileURLWithPath: text, isDirectory: true)
+            }
+        } catch {}
+        return ProcessInfo.processInfo.environment["RECORDINGS_DIR"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? projectURL.appendingPathComponent("recordings", isDirectory: true)
     }
 
     private func configureMenu() {
