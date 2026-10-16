@@ -104,7 +104,8 @@ Check whether you already have it:
 python3.12 --version
 ```
 
-You should see `Python 3.12.` followed by a number. If so, go to Step 4.
+You should see `Python 3.12.` followed by a number. If so, do the `arm64` check
+below, then go to Step 4.
 
 **Do not use the `python3` that came with the Command Line Tools.** It is version
 3.9, which is too old: the speaker-separation package refuses to install on it.
@@ -117,13 +118,25 @@ If `python3.12` is `command not found`, install it in one of two ways:
   brew install python@3.12
   ```
 
-- Or download the macOS installer from <https://www.python.org/downloads/macos/>
-  (any 3.12 release), open it and click through.
+- Or, without Homebrew, download Python 3.12.10 from
+  <https://www.python.org/downloads/release/python-31210/>, open the `.pkg` and
+  click through. python.org's newer 3.12.x releases are security-only and ship
+  no macOS installer; 3.12.10 is the last 3.12 release that has one.
 
 Either way you end up with a `python3.12` command. If the check above still fails, close Terminal, open a new window and try again.
 
-(Python 3.14 also works, but only on macOS 14 or later. Stay on 3.12 unless you
-have a reason not to.)
+On Apple Silicon, check that this Python is the right kind of build:
+
+```bash
+python3.12 -c "import platform; print(platform.machine())"
+```
+
+It must print `arm64`. If it prints `x86_64`, that Python is an Intel build
+(for example Homebrew under `/usr/local`, carried over from an Intel Mac): use
+the python.org installer instead.
+
+(Python 3.14 works only on Apple Silicon with macOS 14 or later; not on macOS 13
+or Intel. Stay on 3.12 unless you have a reason not to.)
 
 ## Step 4 — Download the project
 
@@ -176,6 +189,9 @@ This prints nothing when it works.
 This updates the installer itself and ends with `Successfully installed pip-…`
 (or `Requirement already satisfied` if it was current).
 
+Intel Mac (`uname -m` printed `x86_64`)? Run
+`.venv/bin/pip install -r requirements.txt` instead and skip the next command.
+
 ```bash
 .venv/bin/pip install -r requirements-diarization.txt
 ```
@@ -224,7 +240,7 @@ Skip this step only if you decided to run without speaker separation.
 3. Go to <https://huggingface.co/settings/tokens> and click **New token**. Give
    it any name, choose the **Read** type, and create it. (If you prefer a
    fine-grained token, tick "Read access to contents of all public gated repos
-   you can access".)
+   you can access"; without it the token fails.)
 4. Copy the token. It starts with `hf_`. Hugging Face shows it once — copy it
    now.
 
@@ -326,7 +342,7 @@ becomes `Up to date:`.
 
 A ✒︎ icon appears in the macOS menu bar, at the top right of the screen.
 
-**If the last lines say `Signed ad-hoc` with a warning**, the certificate from
+**If you see `Signed ad-hoc`** with a warning, the certificate from
 Step 7 was not found (or has expired). MeetRec still works; go back to Step 7 if
 you would rather not re-grant permissions after each rebuild.
 
@@ -344,10 +360,12 @@ Click the ✒︎ icon and choose **Start recording — Italiano** (or whichever
 language you want).
 
 1. macOS asks for the **Microphone**. Click **Allow**.
-2. A moment later an alert says **Recording failed**. **This is expected on the
-   first try.** macOS only adds MeetRec to the Screen Recording list after
-   refusing it once, and the refused attempt leaves an empty session folder in
-   `recordings/`; you can delete it.
+2. macOS also shows its own screen-recording dialog; click **Open System
+   Settings**. A moment later an alert says **Recording failed**. **This is
+   expected on the first try.** macOS only adds MeetRec to the Screen Recording
+   list after refusing it once. The refused attempt leaves a session folder with
+   no audio in `recordings/` (it holds `meta.json` and `recorder.log`); you can
+   delete it.
 3. Open  → System Settings → Privacy & Security → **Screen & System Audio
    Recording** (on macOS 13 and 14 it is called **Screen Recording**) and switch
    **MeetRec** on.
@@ -362,7 +380,8 @@ language you want).
 
 Now click ✒︎ → **Start recording** again, say a few words, and click ✒︎ →
 **Stop recording**. This time there is no alert. This recording exists to check
-the permissions; you can delete it later.
+the permissions; you can delete it later. The first real transcription
+downloads the transcription model, about 1.5 GB (see Step 11).
 
 **If MeetRec is missing from the Microphone list**, note that this list has no
 **+** button, so you cannot add it by hand. Reset the request and try again:
@@ -534,8 +553,9 @@ rm -rf .venv && python3.12 -m venv .venv
 
 ### doctor shows ✗ Apple Silicon
 
-This is an Intel Mac. The speaker-separation packages cannot be installed here.
-Use `requirements.txt` and turn the feature off, as described in
+This is an Intel Mac, or your Python is an Intel build running under Rosetta
+(see the `arm64` check in Step 3). The speaker-separation packages cannot be
+installed here. Use `requirements.txt` and turn the feature off, as described in
 [Running without speaker separation](#running-without-speaker-separation).
 
 ### doctor shows ✗ pyannote.audio
@@ -585,8 +605,8 @@ The token is valid but cannot reach the models. Almost always one of:
   pages. The third one, `speaker-diarization-community-1`, is easy to miss.
 - The token belongs to a different Hugging Face account than the one that
   accepted them.
-- The token was created as *write* or *fine-grained* without read access to
-  gated repositories. Create a plain **Read** token instead.
+- The token is *fine-grained* without "Read access to contents of all public
+  gated repos you can access". Create a plain **Read** token instead.
 
 `./meetrec.sh doctor` shows which of the three pages is the problem.
 
@@ -644,11 +664,18 @@ tccutil reset Microphone com.frasal.meetrec.menubar
 
 Then run `./meetrec.sh install` and grant the prompts one last time.
 
-### "Recording failed or produced no audio tracks"
+### "Recording failed" alert, or "Failed to start" / "no audio tracks" from ./meet.sh
 
-Neither track captured anything, which means the permissions from Step 9 are not
-in place. Check both **Microphone** and **Screen & System Audio Recording** in
-System Settings → Privacy & Security, and restart MeetRec after changing either.
+The permissions from Step 9 are not in place. Check both **Microphone** and
+**Screen & System Audio Recording** in System Settings → Privacy & Security.
+
+- If the menu bar shows the alert **Recording failed**, the permissions belong
+  to **MeetRec**. Restart MeetRec after changing either.
+- If `./meet.sh` prints `Failed to start: …`, the recorder exited because a
+  permission is missing, before `meet.sh` made its own check. If it prints
+  `Recording failed or produced no audio tracks`, neither track captured
+  anything. Either way the permissions belong to **Terminal** (or iTerm), not
+  MeetRec.
 
 ### Everything is transcribed twice
 
@@ -713,8 +740,9 @@ you already have settings in it, open `~/.config/meetrec/config.json` in a text
 editor and set `"diarize_system": false` there instead. All the other settings
 are explained in [README.md](README.md).
 
-Restart MeetRec after changing the configuration: ✒︎ → **Quit MeetRec**, then
-`./meetrec.sh install`. `./meet.sh` reads the file each time, so it needs no
+If you came here from Step 5, MeetRec is not installed yet: skip the restart and
+continue with Step 7 (skip Step 6, the token). Otherwise restart MeetRec: ✒︎ →
+**Quit MeetRec**, then `./meetrec.sh install`. `./meet.sh` reads the file each time, so it needs no
 restart; it follows the configuration unless you pass `nodiar` (off) or `diar`
 (on) as its second argument.
 
@@ -728,9 +756,23 @@ cd ~/meetrec
 git pull
 ```
 
+Update the Python packages (use `requirements.txt` instead if you run without
+speaker separation):
+
+```bash
+.venv/bin/pip install -U -r requirements-diarization.txt
+```
+
 ```bash
 ./meetrec.sh install
 ```
+
+```bash
+./meetrec.sh doctor
+```
+
+If `doctor` shows ✗ Python 3.10+, rebuild the environment as described in
+[doctor shows ✗ Python 3.10+, or pip cannot find pyannote.audio>=4](#doctor-shows--python-310-or-pip-cannot-find-pyannoteaudio4).
 
 `install` recompiles only what actually changed, so permissions are left alone
 when the code did not move.
@@ -743,8 +785,10 @@ Stop MeetRec and remove it from login:
 ./meetrec.sh uninstall
 ```
 
-This keeps your recordings. To remove everything, delete the project folder
-(`rm -rf ~/meetrec`). A few things stay behind; delete them as well if you want
+`./meetrec.sh uninstall` keeps your recordings, because the project folder stays
+where it is. To remove everything, delete the project folder
+(`rm -rf ~/meetrec`); move `recordings` out of the project folder first if you
+want to keep them. A few things stay behind; delete them as well if you want
 a clean Mac:
 
 - `~/Library/LaunchAgents/com.frasal.meetrec.plist.disabled` — the disabled
@@ -753,6 +797,8 @@ a clean Mac:
 - `~/.cache/huggingface` — the downloaded models, about 1.5 GB. Other programs
   may use them too.
 - `~/.config/meetrec` — your configuration, if you created one.
+- The `MeetRec Dev` certificate: in Keychain Access, open the login keychain,
+  My Certificates, and delete it if you no longer need it.
 
 You can also remove MeetRec from System Settings → Privacy & Security
 (Microphone and Screen & System Audio Recording).

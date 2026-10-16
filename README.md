@@ -44,13 +44,15 @@ Requirements:
    xcode-select --install
    ```
 
-2. Install Python 3.12 (or use the [python.org installer](https://www.python.org/downloads/macos/)). Both give you a `python3.12` command.
+2. Install Python 3.12. Both routes give you a `python3.12` command.
 
    ```bash
    brew install python@3.12
    ```
 
-3. Download MeetRec and install its Python packages:
+   Without Homebrew, download Python 3.12.10 from <https://www.python.org/downloads/release/python-31210/>, open the `.pkg` and click through. python.org's newer 3.12.x releases are security-only and ship no macOS installer; 3.12.10 is the last 3.12 release that has one.
+
+3. Download MeetRec and install its Python packages (Intel Mac: `requirements.txt` instead; see below):
 
    ```bash
    git clone https://github.com/frasal-test/meetrec.git
@@ -88,7 +90,7 @@ Requirements:
    ./meetrec.sh install
    ```
 
-8. Check the installation. Every line should start with ✓:
+8. Check the installation. Every check line should start with ✓; ignore the "Permissions as seen by this terminal" line under them, because it describes Terminal, not MeetRec:
 
    ```bash
    ./meetrec.sh doctor
@@ -100,6 +102,8 @@ Without diarization (also the only option on Intel Macs): install `requirements.
 mkdir -p ~/.config/meetrec
 echo '{"transcription": {"diarize_system": false}}' > ~/.config/meetrec/config.json
 ```
+
+Updating later: run `git pull`, then `.venv/bin/pip install -U -r requirements-diarization.txt` (`requirements.txt` without speaker separation), then `./meetrec.sh install`.
 
 Wear headphones, otherwise your microphone picks up the other participants and they are transcribed twice.
 
@@ -119,6 +123,7 @@ Wear headphones, otherwise your microphone picks up the other participants and t
 
 The ✒︎ menu has:
 
+- About MeetRec
 - Start recording — Italiano / English / Español / Auto detect
 - Stop recording
 - Open recordings
@@ -327,13 +332,13 @@ Safe to repeat: it overwrites `transcripts/` and never touches `audio/`.
 ## Known limitations
 
 - macOS only, 13 or later, on Apple Silicon. Intel Macs get transcription but no speaker separation: PyTorch 2.8, which pyannote 4 needs, has no Intel build.
-- Python 3.10 to 3.13. Python 3.14 works only on macOS 14 or later, because onnxruntime has no wheel for it on macOS 13.
+- Python 3.10 to 3.13. Python 3.14 works only on Apple Silicon with macOS 14 or later; not on macOS 13 or Intel.
 - Build from source: no prebuilt binary and no notarized app. You create the self-signed certificate yourself.
 - The system track captures all system audio (notifications and music included), not a single app.
 - Without headphones, remote voices leak into the microphone and are transcribed twice.
 - Transcription runs on the CPU; GPU acceleration is not used or tested.
 - Diarization applies only to the system track. pyannote uses MPS when available.
-- The first transcription downloads the `medium` model (1.4 GB, cached in `~/.cache/huggingface`); diarization adds about 32 MB. The Python environment is about 1 GB.
+- The first transcription downloads the `medium` model (about 1.5 GB, cached in `~/.cache/huggingface`); diarization adds about 32 MB. The Python environment is about 1 GB.
 - The "Permissions as seen by this terminal" line of `doctor` describes Terminal when run from Terminal, not MeetRec. The menu's Run doctor reports MeetRec's own grants (output in `recordings/.menubar.log`).
 - The first recording always fails until you enable Screen & System Audio Recording for MeetRec and restart it.
 - pyannote may print a "torchcodec is not installed correctly" warning when FFmpeg is absent. It is harmless; MeetRec passes audio in memory.

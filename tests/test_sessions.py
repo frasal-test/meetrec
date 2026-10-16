@@ -10,6 +10,7 @@ import os
 import struct
 import sys
 import tempfile
+import threading
 import types
 import unittest
 import wave
@@ -43,7 +44,7 @@ from meeting_recorder.config import (
     load_config,
 )
 from meeting_recorder.control import main as control_main
-from meeting_recorder.control import pyannote_version_check
+from meeting_recorder.control import model_access_check, pyannote_version_check
 from meeting_recorder.session_transcription import (
     SessionProcessor,
     merge_track_transcripts,
@@ -418,6 +419,7 @@ class DegradedDiarizationTests(unittest.TestCase):
         # pyannote.audio 3.x answers a refused token with None, not an error.
         pyannote = types.ModuleType("pyannote")
         audio = types.ModuleType("pyannote.audio")
+        audio.__version__ = "4.0.7"
         audio.Pipeline = mock.Mock(**{"from_pretrained.return_value": None})
         pyannote.audio = audio
         args = argparse.Namespace(
@@ -432,6 +434,28 @@ class DegradedDiarizationTests(unittest.TestCase):
         ):
             with self.assertRaises(DiarizationUnavailable):
                 load_diarizer(args)
+
+    def test_pyannote_3_is_refused_as_settled(self) -> None:
+        # 3.x fails against huggingface_hub 1.x on every attempt; retrying
+        # cannot help, so it must degrade instead of failing the job.
+        pyannote = types.ModuleType("pyannote")
+        audio = types.ModuleType("pyannote.audio")
+        audio.__version__ = "3.4.0"
+        audio.Pipeline = mock.Mock()
+        pyannote.audio = audio
+        args = argparse.Namespace(
+            diarize=True,
+            hf_token="hf_token",
+            diarization_model="pyannote/speaker-diarization-3.1",
+            diarization_device="cpu",
+        )
+        with mock.patch.dict(
+            sys.modules,
+            {"pyannote": pyannote, "pyannote.audio": audio},
+        ):
+            with self.assertRaisesRegex(DiarizationUnavailable, "4.x is required"):
+                load_diarizer(args)
+        audio.Pipeline.from_pretrained.assert_not_called()
 
     def test_the_warning_reaches_every_readable_output(self) -> None:
         warning = "Speaker separation was skipped. Everyone is REMOTE."
@@ -731,6 +755,29 @@ class DoctorPyannoteVersionTests(unittest.TestCase):
         passed, detail = self.check(None)
         self.assertFalse(passed)
         self.assertIn("requirements-diarization.txt", detail)
+
+    def test_the_underscore_spelling_is_found(self) -> None:
+        def version(name: str) -> str:
+            if name == "pyannote_audio":
+                return "4.0.7"
+            raise importlib.metadata.PackageNotFoundError(name)
+
+        with mock.patch("importlib.metadata.version", side_effect=version):
+            self.assertEqual(pyannote_version_check(), (True, "version 4.0.7"))
+
+
+class DoctorModelAccessTests(unittest.TestCase):
+    def test_a_hung_check_times_out(self) -> None:
+        release = threading.Event()
+        with mock.patch(
+            "meeting_recorder.control._model_access_check",
+            side_effect=lambda repo, token: release.wait(5),
+        ), mock.patch(
+            "meeting_recorder.control.MODEL_ACCESS_TIMEOUT_SECONDS", 0.05
+        ):
+            result = model_access_check("pyannote/x", "hf_token")
+        release.set()
+        self.assertEqual(result, (False, "could not check: timed out"))
 
 
 if __name__ == "__main__":

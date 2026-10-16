@@ -834,6 +834,22 @@ def load_diarizer(args: argparse.Namespace) -> object | None:
             "requirements-diarization.txt to enable it."
         ) from exc
 
+    # An environment created before the requirement moved to 4 still has 3.x,
+    # whose calls fail against huggingface_hub 1.x with a TypeError on every
+    # attempt. Retrying cannot fix that, so it settles here and the transcript
+    # is kept. A version that cannot be parsed is taken as 4: better to try
+    # than to refuse a working install.
+    import pyannote.audio
+
+    version = str(getattr(pyannote.audio, "__version__", "4"))
+    major_text = version.split(".", 1)[0]
+    major = int(major_text) if major_text.isdigit() else 4
+    if major < 4:
+        raise DiarizationUnavailable(
+            f"pyannote.audio {version} is installed; 4.x is required. "
+            "Run .venv/bin/pip install -U -r requirements-diarization.txt."
+        )
+
     token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
 
     try:

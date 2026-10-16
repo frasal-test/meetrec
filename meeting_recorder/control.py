@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import fcntl
 import importlib.metadata
 import importlib.util
@@ -116,9 +117,16 @@ def requested_options(args: argparse.Namespace) -> dict[str, object]:
 
 
 def pyannote_version_check() -> tuple[bool, str]:
-    try:
-        installed = importlib.metadata.version("pyannote.audio")
-    except importlib.metadata.PackageNotFoundError:
+    # Python 3.9's importlib.metadata does not normalise names, and pip may
+    # record the distribution with either spelling, so try both.
+    installed = None
+    for name in ("pyannote.audio", "pyannote_audio"):
+        try:
+            installed = importlib.metadata.version(name)
+            break
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    if installed is None:
         return False, "missing — install requirements-diarization.txt"
     try:
         major = int(installed.split(".", 1)[0])
@@ -129,7 +137,24 @@ def pyannote_version_check() -> tuple[bool, str]:
     return False, f"version {installed} — 4.x required"
 
 
+# huggingface_hub's HTTP session has no timeout, so a stalled connection would
+# hang doctor forever.
+MODEL_ACCESS_TIMEOUT_SECONDS = 15
+
+
 def model_access_check(repo: str, token: str) -> tuple[bool, str]:
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_model_access_check, repo, token)
+    try:
+        return future.result(timeout=MODEL_ACCESS_TIMEOUT_SECONDS)
+    except concurrent.futures.TimeoutError:
+        return False, "could not check: timed out"
+    finally:
+        # Do not wait: the hung thread must not block the process from exiting.
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _model_access_check(repo: str, token: str) -> tuple[bool, str]:
     from huggingface_hub import auth_check
     from huggingface_hub.errors import (
         GatedRepoError,
@@ -148,6 +173,8 @@ def model_access_check(repo: str, token: str) -> tuple[bool, str]:
         status = getattr(getattr(exc, "response", None), "status_code", None)
         if status == 401:
             return False, "token rejected"
+        if status == 403:
+            return False, "token cannot read gated repositories — use a Read token"
         return False, f"could not check: {type(exc).__name__}"
     except Exception as exc:
         return False, f"could not check: {type(exc).__name__}"
