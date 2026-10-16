@@ -24,6 +24,7 @@ from meeting_recorder.transcription import (
     diarization_progress_hook,
     gated_speech_gain_db,
     load_diarization_waveform,
+    split_segment_on_pauses,
     transcribe_source,
     write_markdown,
     write_speaker_txt,
@@ -306,6 +307,36 @@ class TrackMergeTests(unittest.TestCase):
         self.assertEqual(merged.segments[0].words[0].start, 0.25)
         self.assertEqual(merged.diarization[0].start, 0.5)
         self.assertEqual(merged.duration, 4)
+
+
+class SegmentPauseSplitTests(unittest.TestCase):
+    def test_long_pause_splits_segment(self) -> None:
+        # The mic track of a real session: two phrases 17 s apart, with the
+        # remote side talking in between, came back as one Whisper segment.
+        words = [
+            Word(2.14, 2.88, " So"),
+            Word(3.24, 3.62, " good."),
+            Word(3.72, 4.08, " now."),
+            Word(24.15, 24.39, " So"),
+            Word(25.85, 26.33, " right"),
+        ]
+        parts = split_segment_on_pauses(
+            TranscriptSegment(
+                2.14, 26.33, " So good. now. So right", words=words
+            )
+        )
+        self.assertEqual(
+            [(part.start, part.end, part.text) for part in parts],
+            [(2.14, 4.08, " So good. now."), (24.15, 26.33, " So right")],
+        )
+        self.assertEqual(parts[1].words, words[3:])
+
+    def test_short_pauses_and_missing_words_keep_segment(self) -> None:
+        words = [Word(0.0, 0.5, " Ciao"), Word(1.5, 2.0, " a tutti")]
+        segment = TranscriptSegment(0.0, 2.0, " Ciao a tutti", words=words)
+        self.assertEqual(split_segment_on_pauses(segment), [segment])
+        bare = TranscriptSegment(0.0, 30.0, " Senza parole")
+        self.assertEqual(split_segment_on_pauses(bare), [bare])
 
 
 class MarkdownOutputTests(unittest.TestCase):

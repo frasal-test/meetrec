@@ -9,7 +9,7 @@ import tempfile
 import threading
 import time
 import wave
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterable, TypeVar
 
@@ -214,6 +214,37 @@ def write_markdown(path: Path, transcript: Transcript) -> None:
         current_end = segment.end
     flush()
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+# Whisper groups everything inside one 30-second window into a segment, and the
+# VAD stitches speech across long silences into a single window. On the mic
+# track that silence is usually the other side talking, so one segment ends up
+# spanning a remote turn. A pause this long between words starts a new segment.
+SEGMENT_PAUSE_SECONDS = 1.5
+
+
+def split_segment_on_pauses(
+    segment: TranscriptSegment, max_pause: float = SEGMENT_PAUSE_SECONDS
+) -> list[TranscriptSegment]:
+    if not segment.words or len(segment.words) < 2:
+        return [segment]
+    groups: list[list[Word]] = [[segment.words[0]]]
+    for word in segment.words[1:]:
+        if word.start - groups[-1][-1].end > max_pause:
+            groups.append([])
+        groups[-1].append(word)
+    if len(groups) == 1:
+        return [segment]
+    return [
+        replace(
+            segment,
+            start=group[0].start,
+            end=group[-1].end,
+            text="".join(word.word for word in group),
+            words=group,
+        )
+        for group in groups
+    ]
 
 
 def overlap_seconds(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
@@ -646,12 +677,14 @@ def transcribe_source(
                     )
                     for word in segment.words
                 ]
-            segments.append(
-                TranscriptSegment(
-                    start=segment.start,
-                    end=segment.end,
-                    text=segment.text,
-                    words=words,
+            segments.extend(
+                split_segment_on_pauses(
+                    TranscriptSegment(
+                        start=segment.start,
+                        end=segment.end,
+                        text=segment.text,
+                        words=words,
+                    )
                 )
             )
     finally:
