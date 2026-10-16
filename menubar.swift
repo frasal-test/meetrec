@@ -725,7 +725,6 @@ final class MenuController: NSObject, @unchecked Sendable {
         let info = Bundle.main.infoDictionary
         let shortVersion = (info?["CFBundleShortVersionString"] as? String)
             .flatMap { $0.isEmpty ? nil : $0 } ?? "dev"
-        let build = info?["CFBundleVersion"] as? String
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
@@ -748,14 +747,15 @@ final class MenuController: NSObject, @unchecked Sendable {
             )
         )
 
-        var options: [NSApplication.AboutPanelOptionKey: Any] = [
+        let options: [NSApplication.AboutPanelOptionKey: Any] = [
             .applicationName: "MeetRec",
             .applicationVersion: shortVersion,
+            // Left out, the panel reads CFBundleVersion itself and prints the
+            // build number as "Version 0.9.1 (1)". MeetRec has no separate
+            // build number, so an empty string keeps the line to the version.
+            .version: "",
             .credits: credits,
         ]
-        if let build, !build.isEmpty {
-            options[.version] = build
-        }
         NSApplication.shared.activate(ignoringOtherApps: true)
         NSApplication.shared.orderFrontStandardAboutPanel(options: options)
     }
