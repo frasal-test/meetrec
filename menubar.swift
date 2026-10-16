@@ -359,20 +359,42 @@ final class MenuController: NSObject, @unchecked Sendable {
             DispatchQueue.main.async {
                 self.startProgressMonitoring(sessionURL)
             }
-            let worker = runControl([
-                "worker",
-                "--once",
-            ])
+            // A failed attempt leaves the job "pending" for a retry, and
+            // `worker --once` does not retry it, so keep running the worker
+            // until the job settles. The worker's exit status says nothing
+            // about this session, so the job file decides what to report.
+            var state: String?
+            var runs = 0
+            repeat {
+                _ = runControl(["worker", "--once"])
+                state = jobState(sessionURL)
+                runs += 1
+            } while state == "pending" && runs < 5
+            let complete = state == "complete"
             DispatchQueue.main.async {
                 self.pollProgress()
+                if !complete && self.processingSessionURL == sessionURL {
+                    self.finishProgress(success: false)
+                }
             }
             notify(
                 title: "MeetRec",
-                message: worker == 0
+                message: complete
                     ? "Transcript ready: \(sessionURL.lastPathComponent)"
                     : "Transcription needs attention: \(sessionURL.lastPathComponent)"
             )
         }
+    }
+
+    private func jobState(_ sessionURL: URL) -> String? {
+        let jobURL = sessionURL.appendingPathComponent("job.json")
+        guard
+            let data = try? Data(contentsOf: jobURL),
+            let job = try? JSONDecoder().decode(JobStatus.self, from: data)
+        else {
+            return nil
+        }
+        return job.state
     }
 
     private func resumePendingTranscriptions() {
