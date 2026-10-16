@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    name: Build (macOS)
+    # The Swift sources are compiled on the user's Mac with swiftc, so this is
+    # the only place a change to them is checked before it reaches anyone.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the Info.plists
+        run: plutil -lint Menubar-Info.plist Recorder-Info.plist
+
+      - name: Check the shell scripts
+        run: |
+          bash -n meetrec.sh
+          bash -n meet.sh
+
+      # No "MeetRec Dev" certificate on the runner, so this exercises the
+      # ad-hoc fallback; the build itself is the same.
+      - name: Build the recorder and the menu bar app
+        run: ./meetrec.sh build
+
+      - name: Verify the app bundle
+        run: |
+          codesign --verify --strict --verbose=2 MeetRec.app
+          codesign --verify --verbose=2 .recorder
+          for file in AppIcon.icns MenuBarIdleTemplate.png MenuBarIdleTemplate@2x.png \
+              MenuBarRecTemplate.png MenuBarRecTemplate@2x.png; do
+            test -s "MeetRec.app/Contents/Resources/$file" || {
+              echo "Missing resource: $file" >&2
+              exit 1
+            }
+          done
+
+  tests:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # The suite mocks faster-whisper and pyannote, so it needs neither
+      # torch nor the models; the one test that needs torch skips itself.
+      - name: Run the unit tests
+        run: python -m unittest discover -s tests -v

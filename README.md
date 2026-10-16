@@ -2,6 +2,7 @@
 
 Record and transcribe your Mac meetings locally: your voice and the other participants on separate tracks, with remote speakers told apart.
 
+[![CI](https://github.com/frasal-test/meetrec/actions/workflows/ci.yml/badge.svg)](https://github.com/frasal-test/meetrec/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: macOS 13+](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey.svg)
 ![Swift](https://img.shields.io/badge/Swift-F05138.svg?logo=swift&logoColor=white)
