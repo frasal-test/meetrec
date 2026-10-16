@@ -1,2 +1,5 @@
 faster-whisper>=1.2.1
-
+# PyAV 19 dropped the metadata_errors argument that faster-whisper 1.2.1
+# still passes to av.open(), so every transcription fails with a TypeError.
+# Lift this once a faster-whisper release stops passing it.
+av<19
