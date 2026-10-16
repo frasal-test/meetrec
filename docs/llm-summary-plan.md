@@ -11,14 +11,16 @@ Dopo la trascrizione locale, MeetRec può generare `transcripts/summary.md` con 
 Ragionate dal punto di vista dell'utente: niente scelte tecniche esposte.
 
 - **Spento di default.** MeetRec si presenta con "tutto resta sul tuo Mac": il cloud è una scelta esplicita.
-- **Una sola domanda in `setup.sh`**: "Vuoi il riassunto automatico? Con quale servizio? Nessuno / Anthropic / OpenAI / Oracle OCI".
-  - Il servizio va **chiesto**, non ricavato dalla chiave: le chiavi OCI iniziano con `sk-` come quelle OpenAI.
-  - Poi si chiede la chiave e la si verifica subito con una chiamata minima, come `check_token` fa con Hugging Face.
-  - Solo per OCI si chiede anche la region, con proposta `eu-frankfurt-1`.
-- **Modello fisso per servizio**, scelto da noi. È modificabile a mano in `config.json` insieme al base URL, ma non compare nel setup.
+- **Niente domande sul riassunto in `setup.sh`.** MeetRec si installa senza LLM esterno; l'opzione si attiva dopo, dalla voce **"Settings…"** della menu bar.
+- Nella finestra Settings c'è un interruttore "Automatic summary" (testo definitivo da decidere). Attivandolo compare la scelta del servizio:
+  - menu a tendina (o radio button) "Anthropic / OpenAI / Oracle OCI";
+  - il servizio scelto mostra solo i campi che servono: API key per tutti, più la region per OCI (proposta `eu-frankfurt-1`);
+  - la chiave si verifica subito con una chiamata minima, come fa `check_token` con Hugging Face.
+- **Modello fisso per servizio**, scelto da noi. Si può cambiare a mano in `config.json` insieme al base URL, ma non compare in Settings.
 - **Chiavi in `.env`** (già in `.gitignore`, permessi 600), come `HF_TOKEN`. Mai in `config.json`.
-- **Avviso prima di attivare**: "Il testo della riunione (non l'audio) verrà inviato a <servizio> per creare il riassunto."
+- **Avviso prima di attivare**, nella finestra Settings: "Il testo della riunione (non l'audio) verrà inviato a <servizio> per creare il riassunto."
 - **Fuori dalla prima versione**: scelta della fascia qualità nell'interfaccia, modello locale (Ollama/MLX), Batch API.
+
 
 ## Modelli scelti
 
@@ -114,11 +116,13 @@ Alternative OCI scartate:
 - **Variabili d'ambiente**: `load_env_files()` in `transcription.py` carica `.env` del progetto e della cwd con `setdefault`.
 - **Setup**: `setup.sh` è bilingue: `say "english" "italiano"`, più `warn` e `ask_secret`.
   - Il token Hugging Face segue `read_token` → `check_token` → `save_token`.
-  - `save_token` scrive `HF_TOKEN` in `.env` con un file temporaneo, `chmod 600` e `mv`. Va generalizzato a `save_env_var NAME VALUE`.
+  - `save_token` scrive `HF_TOKEN` in `.env` con un file temporaneo, `chmod 600` e `mv`. Per le chiavi LLM serve la stessa logica, ma in Python (vedi `control.py`), perché la scrittura parte da Settings e non da `setup.sh`.
   - La config si scrive da Python inline, come in `set_speaker_separation`.
 - **Dipendenze opzionali**: esiste già `requirements-diarization.txt`; serve lo stesso schema per `requirements-summary.txt` (`anthropic`, `openai`).
 - **Menu bar**: `menubar.swift`, metodo `rebuildMenu()`, con etichette in inglese ("Open recordings", "Run doctor", …).
   - La notifica "Transcript ready: <sessione>" è intorno alla riga 597.
+  - Oggi **non c'è una finestra Settings**: solo voci di menu e `NSAlert`. Va costruita da zero.
+  - Lo Swift chiama Python con `Process` su `python -m meeting_recorder.control <argomenti>` (`controlOutput`, intorno alla riga 187).
 - **CLI**: `meeting_recorder/control.py` (sottocomandi argparse, tra cui `doctor`).
 - **Test**: `tests/` con `unittest`. La CI (`.github/workflows/ci.yml`) esegue `python -m unittest discover -s tests -v` su Python 3.10–3.13 (Ubuntu), compila la parte Swift su macOS e controlla gli script con `bash -n`.
   - I test non devono usare la rete: fare mock dei client.
@@ -140,31 +144,38 @@ Alternative OCI scartate:
 3. **`meeting_recorder/session_transcription.py`**: chiamata a `summarize_session` dopo gli output e prima di `on_stop`, con fase di avanzamento e log.
 4. **`meeting_recorder/control.py`**
    - Sottocomando `summarize <sessione>`, per rifare o provare il riassunto su una sessione già trascritta.
+   - Sottocomandi usati dalla finestra Settings, così lo Swift non scrive mai `.env` o `config.json` da solo:
+     - `summary-status`: stato attuale in JSON (attivo, servizio, region, chiave presente sì/no; mai la chiave);
+     - `summary-enable --provider <p> [--region <r>]`: legge la chiave da **stdin** (mai come argomento, sarebbe visibile in `ps`), installa `requirements-summary.txt` nel `.venv` se mancano i pacchetti, verifica la chiave con una chiamata minima, la salva in `.env` (file temporaneo, `chmod 600`, `mv`) e scrive il blocco `summary` nella config. Se qualcosa fallisce non cambia nulla e restituisce un messaggio leggibile;
+     - `summary-disable`: mette `enabled=false` e lascia la chiave in `.env`.
    - In `doctor`, se il riassunto è attivo: pacchetto installato, chiave presente e servizio valido.
-5. **`setup.sh`**
-   - La domanda sul servizio e l'avviso privacy, in italiano e inglese.
-   - `ask_secret` per la chiave, verifica con una chiamata minima dal `.venv` e `save_env_var`.
-   - Per OCI anche la region.
-   - Installazione di `requirements-summary.txt` solo se il riassunto è attivo.
-   - Scrittura del blocco `summary` nella config.
-6. **`requirements-summary.txt`** (nuovo): `anthropic`, `openai`.
+5. **`setup.sh`**: nessuna modifica per il riassunto. L'installazione resta senza LLM esterno.
+6. **`requirements-summary.txt`** (nuovo): `anthropic`, `openai`. Viene installato da `summary-enable`, non da `setup.sh`.
 7. **`menubar.swift`**
+   - Voce "Settings…" nel menu, che apre una piccola finestra (AppKit, come il resto dell'app):
+     - interruttore "Automatic summary";
+     - scelta del servizio, campo API key (`NSSecureTextField`) e, solo per OCI, la region;
+     - l'avviso privacy prima di confermare;
+     - pulsante di conferma che lancia `summary-enable` in background, con indicatore di attesa e messaggio di esito.
+   - All'apertura legge lo stato con `summary-status`.
    - Voce "Open summary" quando la sessione ha `transcripts/summary.md`.
    - La notifica dice che il riassunto è pronto.
 8. **Documentazione**
    - `README.md`: funzione e nota privacy; tabella "Which file to use" con `summary.md`.
-   - `INSTALL.md`: come ottenere le chiavi; per OCI, i passi dell'amministratore e la policy IAM.
-9. **Test**: config (default spento, provider non valido), scelta del modello di default, scrittura di `summary.md` con client finti, gestione di errori, rifiuti e testo troppo lungo.
+   - `INSTALL.md`: come attivare il riassunto da Settings e come ottenere le chiavi; per OCI, i passi dell'amministratore e la policy IAM.
+9. **Test**: config (default spento, provider non valido), scelta del modello di default, scrittura di `summary.md` con client finti, gestione di errori, rifiuti e testo troppo lungo, `summary-enable` / `summary-disable` / `summary-status` (chiave letta da stdin, `.env` con permessi 600, nessuna modifica se la verifica fallisce).
 
 ## Prompt di riassunto
 
-- **Lingua**: quella della trascrizione (`transcription.language`: it / en / es; con auto detect, la lingua prevalente).
+- **Lingua del riassunto**: sempre quella della riunione.
+  - Con `transcription.language` impostato (it / en / es) c'è un prompt scritto in quella lingua.
+  - Con il rilevamento automatico il prompt è in inglese e chiede al modello di scrivere il riassunto nella lingua prevalente della riunione.
 - **Il transcript è un dato, non un'istruzione.** Va nel messaggio utente dentro un delimitatore, per esempio `<transcript>…</transcript>`. Nel prompt di sistema va scritto di ignorare le istruzioni contenute nel parlato.
 - Avvertire il modello che:
   - il testo viene da un riconoscimento vocale e può contenere errori;
   - `ME` è chi registra e `REMOTE_xx` sono gli altri partecipanti;
   - non deve inventare nomi o attribuzioni.
-- Struttura di `summary.md`:
+- Struttura provvisoria di `summary.md`:
   - **Sintesi**: 5–10 righe;
   - **Decisioni**;
   - **Azioni**: chi, cosa ed eventuale scadenza;
