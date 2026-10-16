@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -106,8 +107,11 @@ def load_config(path: Path | None = None) -> AppConfig:
             raise ValueError(f"Config root must be an object: {config_path}")
         raw = loaded
 
+    # The menu bar app and meet.sh ask this module where recordings live, so
+    # the environment override has to win here for all three to agree.
     recordings = Path(
-        str(raw.get("recordings_dir", default_recordings_dir()))
+        os.environ.get("RECORDINGS_DIR")
+        or str(raw.get("recordings_dir", default_recordings_dir()))
     ).expanduser()
     transcription_raw = raw.get("transcription", {})
     if not isinstance(transcription_raw, dict):

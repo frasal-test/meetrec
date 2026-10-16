@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -26,8 +30,10 @@ from meeting_recorder.transcription import (
 from meeting_recorder.config import (
     AppConfig,
     TranscriptionConfig,
+    default_recordings_dir,
     load_config,
 )
+from meeting_recorder.control import main as control_main
 from meeting_recorder.session_transcription import (
     SessionProcessor,
     merge_track_transcripts,
@@ -535,6 +541,75 @@ class TranscriptionSettingsTests(unittest.TestCase):
             # Untouched keys keep the hardened defaults.
             self.assertTrue(settings.vad_filter)
             self.assertEqual(settings.hallucination_silence_threshold, 2.0)
+
+
+class RecordingsDirTests(unittest.TestCase):
+    def config_file(self, temporary: str, **values: object) -> Path:
+        path = Path(temporary) / "config.json"
+        write_json(path, values)
+        return path
+
+    def test_env_overrides_config_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            with mock.patch.dict(os.environ, {"RECORDINGS_DIR": "/from/env"}):
+                self.assertEqual(
+                    load_config(path).recordings_dir, Path("/from/env")
+                )
+
+    def test_config_file_used_when_env_unset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                self.assertEqual(
+                    load_config(path).recordings_dir, Path("/from/file")
+                )
+
+    def test_empty_env_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            with mock.patch.dict(os.environ, {"RECORDINGS_DIR": ""}):
+                self.assertEqual(
+                    load_config(path).recordings_dir, Path("/from/file")
+                )
+
+    def test_default_when_neither_is_set(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary)
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                self.assertEqual(
+                    load_config(path).recordings_dir,
+                    default_recordings_dir(),
+                )
+
+    def test_tilde_is_expanded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="~/from-file")
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                self.assertEqual(
+                    load_config(path).recordings_dir,
+                    Path.home() / "from-file",
+                )
+            with mock.patch.dict(os.environ, {"RECORDINGS_DIR": "~/from-env"}):
+                self.assertEqual(
+                    load_config(path).recordings_dir,
+                    Path.home() / "from-env",
+                )
+
+    def test_recordings_dir_command_prints_resolved_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            argv = ["meetrec", "--config", str(path), "recordings-dir"]
+            stdout = io.StringIO()
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                with mock.patch.object(sys, "argv", argv):
+                    with contextlib.redirect_stdout(stdout):
+                        self.assertEqual(control_main(), 0)
+            self.assertEqual(stdout.getvalue(), "/from/file\n")
 
 
 if __name__ == "__main__":
