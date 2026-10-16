@@ -7,8 +7,7 @@ Record and transcribe your Mac meetings locally: your voice and the other partic
 ![Swift](https://img.shields.io/badge/Swift-F05138.svg?logo=swift&logoColor=white)
 ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)
 
-<!-- TODO: record docs/demo.gif -->
-<!-- <p align="center"><img src="docs/demo.gif" alt="MeetRec demo: start a recording from the menu bar, stop it, open the transcript" width="720"></p> -->
+<p align="center"><img src="docs/demo.gif" alt="MeetRec demo: start a recording from the menu bar, stop it, open the transcript" width="800"></p>
 
 ## Why
 
