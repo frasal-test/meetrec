@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
+import os
+import struct
+import sys
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -17,6 +23,8 @@ from meeting_recorder.transcription import (
     Word,
     diarization_progress_hook,
     gated_speech_gain_db,
+    load_diarization_waveform,
+    split_segment_on_pauses,
     transcribe_source,
     write_markdown,
     write_speaker_txt,
@@ -26,8 +34,10 @@ from meeting_recorder.transcription import (
 from meeting_recorder.config import (
     AppConfig,
     TranscriptionConfig,
+    default_recordings_dir,
     load_config,
 )
+from meeting_recorder.control import main as control_main
 from meeting_recorder.session_transcription import (
     SessionProcessor,
     merge_track_transcripts,
@@ -41,6 +51,22 @@ from meeting_recorder.sessions import (
     run_job,
     update_job_progress,
 )
+
+
+class DiarizationAudioTests(unittest.TestCase):
+    def test_normalized_wav_is_passed_as_waveform(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audio.wav"
+            with wave.open(str(path), "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(16000)
+                wav.writeframes(struct.pack("<3h", -32768, 0, 16384))
+
+            audio = load_diarization_waveform(path)
+            self.assertEqual(audio["sample_rate"], 16000)
+            self.assertEqual(audio["waveform"].shape, (1, 3))
+            self.assertEqual(audio["waveform"].tolist(), [[-1.0, 0.0, 0.5]])
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -281,6 +307,36 @@ class TrackMergeTests(unittest.TestCase):
         self.assertEqual(merged.segments[0].words[0].start, 0.25)
         self.assertEqual(merged.diarization[0].start, 0.5)
         self.assertEqual(merged.duration, 4)
+
+
+class SegmentPauseSplitTests(unittest.TestCase):
+    def test_long_pause_splits_segment(self) -> None:
+        # The mic track of a real session: two phrases 17 s apart, with the
+        # remote side talking in between, came back as one Whisper segment.
+        words = [
+            Word(2.14, 2.88, " So"),
+            Word(3.24, 3.62, " good."),
+            Word(3.72, 4.08, " now."),
+            Word(24.15, 24.39, " So"),
+            Word(25.85, 26.33, " right"),
+        ]
+        parts = split_segment_on_pauses(
+            TranscriptSegment(
+                2.14, 26.33, " So good. now. So right", words=words
+            )
+        )
+        self.assertEqual(
+            [(part.start, part.end, part.text) for part in parts],
+            [(2.14, 4.08, " So good. now."), (24.15, 26.33, " So right")],
+        )
+        self.assertEqual(parts[1].words, words[3:])
+
+    def test_short_pauses_and_missing_words_keep_segment(self) -> None:
+        words = [Word(0.0, 0.5, " Ciao"), Word(1.5, 2.0, " a tutti")]
+        segment = TranscriptSegment(0.0, 2.0, " Ciao a tutti", words=words)
+        self.assertEqual(split_segment_on_pauses(segment), [segment])
+        bare = TranscriptSegment(0.0, 30.0, " Senza parole")
+        self.assertEqual(split_segment_on_pauses(bare), [bare])
 
 
 class MarkdownOutputTests(unittest.TestCase):
@@ -535,6 +591,75 @@ class TranscriptionSettingsTests(unittest.TestCase):
             # Untouched keys keep the hardened defaults.
             self.assertTrue(settings.vad_filter)
             self.assertEqual(settings.hallucination_silence_threshold, 2.0)
+
+
+class RecordingsDirTests(unittest.TestCase):
+    def config_file(self, temporary: str, **values: object) -> Path:
+        path = Path(temporary) / "config.json"
+        write_json(path, values)
+        return path
+
+    def test_env_overrides_config_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            with mock.patch.dict(os.environ, {"RECORDINGS_DIR": "/from/env"}):
+                self.assertEqual(
+                    load_config(path).recordings_dir, Path("/from/env")
+                )
+
+    def test_config_file_used_when_env_unset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                self.assertEqual(
+                    load_config(path).recordings_dir, Path("/from/file")
+                )
+
+    def test_empty_env_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            with mock.patch.dict(os.environ, {"RECORDINGS_DIR": ""}):
+                self.assertEqual(
+                    load_config(path).recordings_dir, Path("/from/file")
+                )
+
+    def test_default_when_neither_is_set(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary)
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                self.assertEqual(
+                    load_config(path).recordings_dir,
+                    default_recordings_dir(),
+                )
+
+    def test_tilde_is_expanded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="~/from-file")
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                self.assertEqual(
+                    load_config(path).recordings_dir,
+                    Path.home() / "from-file",
+                )
+            with mock.patch.dict(os.environ, {"RECORDINGS_DIR": "~/from-env"}):
+                self.assertEqual(
+                    load_config(path).recordings_dir,
+                    Path.home() / "from-env",
+                )
+
+    def test_recordings_dir_command_prints_resolved_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.config_file(temporary, recordings_dir="/from/file")
+            argv = ["meetrec", "--config", str(path), "recordings-dir"]
+            stdout = io.StringIO()
+            with mock.patch.dict(os.environ):
+                os.environ.pop("RECORDINGS_DIR", None)
+                with mock.patch.object(sys, "argv", argv):
+                    with contextlib.redirect_stdout(stdout):
+                        self.assertEqual(control_main(), 0)
+            self.assertEqual(stdout.getvalue(), "/from/file\n")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ import tempfile
 import threading
 import time
 import wave
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterable, TypeVar
 
@@ -216,6 +216,37 @@ def write_markdown(path: Path, transcript: Transcript) -> None:
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+# Whisper groups everything inside one 30-second window into a segment, and the
+# VAD stitches speech across long silences into a single window. On the mic
+# track that silence is usually the other side talking, so one segment ends up
+# spanning a remote turn. A pause this long between words starts a new segment.
+SEGMENT_PAUSE_SECONDS = 1.5
+
+
+def split_segment_on_pauses(
+    segment: TranscriptSegment, max_pause: float = SEGMENT_PAUSE_SECONDS
+) -> list[TranscriptSegment]:
+    if not segment.words or len(segment.words) < 2:
+        return [segment]
+    groups: list[list[Word]] = [[segment.words[0]]]
+    for word in segment.words[1:]:
+        if word.start - groups[-1][-1].end > max_pause:
+            groups.append([])
+        groups[-1].append(word)
+    if len(groups) == 1:
+        return [segment]
+    return [
+        replace(
+            segment,
+            start=group[0].start,
+            end=group[-1].end,
+            text="".join(word.word for word in group),
+            words=group,
+        )
+        for group in groups
+    ]
+
+
 def overlap_seconds(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
     return max(0.0, min(a_end, b_end) - max(a_start, b_start))
 
@@ -330,6 +361,20 @@ def prepare_diarization_audio(source: Path) -> Path:
         raise
 
     return wav_path
+
+
+def load_diarization_waveform(path: Path) -> object:
+    """Read our normalized PCM WAV without pyannote's torchcodec decoder."""
+    import numpy as np
+    import torch
+
+    with wave.open(str(path), "rb") as wav:
+        if wav.getnchannels() != 1 or wav.getsampwidth() != 2:
+            raise ValueError("Expected mono 16-bit PCM diarization audio")
+        sample_rate = wav.getframerate()
+        samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+    waveform = torch.from_numpy(samples.astype(np.float32) / 32768.0).unsqueeze(0)
+    return {"waveform": waveform, "sample_rate": sample_rate}
 
 
 TRANSCRIPTION_SAMPLE_RATE = 16000
@@ -542,9 +587,11 @@ def run_diarization(
     print("Preparing normalized WAV for diarization...", flush=True)
     diarization_audio = prepare_diarization_audio(source)
     try:
+        # pyannote accepts an in-memory waveform. Its path decoder uses
+        # torchcodec, which can fail when the local FFmpeg ABI changes.
         diarization_input = {
             "uri": source.stem,
-            "audio": str(diarization_audio),
+            **load_diarization_waveform(diarization_audio),
         }
         kwargs = diarization_kwargs(args)
         if progress_callback is not None:
@@ -630,12 +677,14 @@ def transcribe_source(
                     )
                     for word in segment.words
                 ]
-            segments.append(
-                TranscriptSegment(
-                    start=segment.start,
-                    end=segment.end,
-                    text=segment.text,
-                    words=words,
+            segments.extend(
+                split_segment_on_pauses(
+                    TranscriptSegment(
+                        start=segment.start,
+                        end=segment.end,
+                        text=segment.text,
+                        words=words,
+                    )
                 )
             )
     finally:

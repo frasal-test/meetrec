@@ -73,14 +73,49 @@ final class MenuController: NSObject, @unchecked Sendable {
 
     init(projectURL: URL) {
         self.projectURL = projectURL
-        self.recordingsURL = ProcessInfo.processInfo.environment[
-            "RECORDINGS_DIR"
-        ].map { URL(fileURLWithPath: $0, isDirectory: true) }
-            ?? projectURL.appendingPathComponent("recordings", isDirectory: true)
-        self.pythonURL = projectURL.appendingPathComponent(".venv/bin/python")
+        let pythonURL = projectURL.appendingPathComponent(".venv/bin/python")
+        self.pythonURL = pythonURL
+        self.recordingsURL = MenuController.resolveRecordingsURL(
+            projectURL: projectURL,
+            pythonURL: pythonURL
+        )
         super.init()
         configureMenu()
         resumePendingTranscriptions()
+    }
+
+    /// The worker scans the directory the Python config names, so recording
+    /// anywhere else leaves sessions it never finds. Ask Python rather than
+    /// re-implement the precedence here; fall back to the old guess only when
+    /// it cannot answer.
+    private static func resolveRecordingsURL(
+        projectURL: URL,
+        pythonURL: URL
+    ) -> URL {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = pythonURL
+        process.arguments = [
+            "-m", "meeting_recorder.control", "recordings-dir",
+        ]
+        process.currentDirectoryURL = projectURL
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            if process.terminationStatus == 0,
+               let text = String(data: data, encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !text.isEmpty
+            {
+                return URL(fileURLWithPath: text, isDirectory: true)
+            }
+        } catch {}
+        return ProcessInfo.processInfo.environment["RECORDINGS_DIR"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? projectURL.appendingPathComponent("recordings", isDirectory: true)
     }
 
     private func configureMenu() {
@@ -324,16 +359,13 @@ final class MenuController: NSObject, @unchecked Sendable {
             DispatchQueue.main.async {
                 self.startProgressMonitoring(sessionURL)
             }
-            let worker = runControl([
-                "worker",
-                "--once",
-            ])
+            let succeeded = runWorkerUntilSettled()
             DispatchQueue.main.async {
                 self.pollProgress()
             }
             notify(
                 title: "MeetRec",
-                message: worker == 0
+                message: succeeded
                     ? "Transcript ready: \(sessionURL.lastPathComponent)"
                     : "Transcription needs attention: \(sessionURL.lastPathComponent)"
             )
@@ -345,10 +377,42 @@ final class MenuController: NSObject, @unchecked Sendable {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.startProgressMonitoring(nil)
             }
-            _ = runControl(["worker", "--once"])
+            _ = runWorkerUntilSettled()
             DispatchQueue.main.async {
                 self.pollProgress()
             }
+        }
+    }
+
+    /// `worker --once` makes one attempt per job. A failed attempt leaves the
+    /// job pending for a retry that nothing else would start, and the menu
+    /// would sit on "Nuovo tentativo" forever. Rerun the worker while a job is
+    /// pending; it moves the job to failed once its attempts run out.
+    private func runWorkerUntilSettled() -> Bool {
+        var status = runControl(["worker", "--once"])
+        var runs = 1
+        while status != 0 && runs < 10 && hasPendingJob() {
+            status = runControl(["worker", "--once"])
+            runs += 1
+        }
+        return status == 0
+    }
+
+    private func hasPendingJob() -> Bool {
+        let entries = (try? FileManager.default.contentsOfDirectory(
+            at: recordingsURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return entries.contains { entry in
+            let jobURL = entry.appendingPathComponent("job.json")
+            guard
+                let data = try? Data(contentsOf: jobURL),
+                let job = try? JSONDecoder().decode(JobStatus.self, from: data)
+            else {
+                return false
+            }
+            return job.state == "pending"
         }
     }
 

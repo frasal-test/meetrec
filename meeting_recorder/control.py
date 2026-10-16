@@ -65,6 +65,7 @@ def parse_args() -> argparse.Namespace:
     subparsers.add_parser("recover")
     subparsers.add_parser("doctor")
     subparsers.add_parser("show-config")
+    subparsers.add_parser("recordings-dir")
     return parser.parse_args()
 
 
@@ -242,6 +243,9 @@ def main() -> int:
                 indent=2,
             )
         )
+        return 0
+    if args.command == "recordings-dir":
+        print(config.recordings_dir)
         return 0
     if args.command == "doctor":
         return doctor(args.config)
