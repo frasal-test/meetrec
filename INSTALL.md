@@ -340,7 +340,8 @@ The `replacing existing signature` lines come from Apple Silicon and are
 harmless. When you run the command again without changing anything, `Built:`
 becomes `Up to date:`.
 
-A ✒︎ icon appears in the macOS menu bar, at the top right of the screen.
+The MeetRec icon — a microphone between sound bars — appears in the macOS menu
+bar, at the top right of the screen.
 
 **If you see `Signed ad-hoc`** with a warning, the certificate from
 Step 7 was not found (or has expired). MeetRec still works; go back to Step 7 if
@@ -356,7 +357,7 @@ again.
 macOS does not let any app hear you or capture other apps' sound without an
 explicit grant, and it only asks the first time the app actually tries.
 
-Click the ✒︎ icon and choose **Start recording — Italiano** (or whichever
+Click the MeetRec icon and choose **Start recording — Italiano** (or whichever
 language you want).
 
 1. macOS asks for the **Microphone**. Click **Allow**.
@@ -369,7 +370,7 @@ language you want).
 3. Open  → System Settings → Privacy & Security → **Screen & System Audio
    Recording** (on macOS 13 and 14 it is called **Screen Recording**) and switch
    **MeetRec** on.
-4. Restart MeetRec so it picks the permission up: ✒︎ → **Quit MeetRec**, then
+4. Restart MeetRec so it picks the permission up: MeetRec menu → **Quit MeetRec**, then
    run:
 
    ```bash
@@ -378,8 +379,8 @@ language you want).
 
    This time it prints `Up to date:` lines instead of `Built:`.
 
-Now click ✒︎ → **Start recording** again, say a few words, and click ✒︎ →
-**Stop recording**. This time there is no alert. This recording exists to check
+Now choose **Start recording** from the MeetRec menu again, say a few words, and choose
+**Stop recording** from the MeetRec menu. This time there is no alert. This recording exists to check
 the permissions; you can delete it later. The first real transcription
 downloads the transcription model, about 1.5 GB (see Step 11).
 
@@ -390,7 +391,7 @@ downloads the transcription model, about 1.5 GB (see Step 11).
 tccutil reset Microphone com.frasal.meetrec.menubar
 ```
 
-Then start a recording from ✒︎ again and the prompt returns.
+Then start a recording from the MeetRec menu again and the prompt returns.
 
 **If MeetRec is missing from the Screen Recording list**, make one recording
 attempt first (point 2 above); that is what puts it there. If you still see
@@ -442,7 +443,7 @@ Terminal it cannot see the app's own grants. Ignore this line and trust System
 Settings instead; the note printed underneath it says the same thing. It is also
 excluded from the pass/fail result on purpose.
 
-To see MeetRec's own grants, click ✒︎ → **Run doctor** in the menu bar. That
+To see MeetRec's own grants, choose **Run doctor** from the MeetRec menu in the menu bar. That
 runs inside MeetRec, so its permissions line is the real one. The output goes to
 `recordings/.menubar.log` in the project folder.
 
@@ -452,10 +453,10 @@ runs inside MeetRec, so its permissions line is the real one. The output goes to
 participants through your speakers, and they end up transcribed twice — once
 from each track.
 
-1. Click ✒︎ and choose the language of the meeting: **Italiano**, **English**,
+1. Click the MeetRec icon and choose the language of the meeting: **Italiano**, **English**,
    **Español**, or **Auto detect** if you are not sure.
 2. The icon changes to show that recording is running.
-3. At the end, click ✒︎ → **Stop recording**.
+3. At the end, choose **Stop recording** from the MeetRec menu.
 
 Transcription then starts in the background — you can start another meeting
 while it runs. The menu-bar icon shows the progress percentage, and the menu
@@ -475,7 +476,7 @@ Press `Ctrl + C` to stop watching; this does not stop the transcription.
 
 ### Where your files are
 
-Click ✒︎ → **Open recordings**, or look in `~/meetrec/recordings/`. Each session
+Choose **Open recordings** from the MeetRec menu, or look in `~/meetrec/recordings/`. Each session
 is a folder named after its start time, for example
 `2026-07-29T10-30-00/`, containing:
 
@@ -504,7 +505,7 @@ follows your configuration unless you pass `diar` or `nodiar`.
 
 ## Troubleshooting
 
-### No ✒︎ icon in the menu bar
+### No MeetRec icon in the menu bar
 
 Check whether the background agent is running:
 
@@ -758,7 +759,7 @@ editor and set `"diarize_system": false` there instead. All the other settings
 are explained in [README.md](README.md).
 
 If you came here from Step 5, MeetRec is not installed yet: skip the restart and
-continue with Step 7 (skip Step 6, the token). Otherwise restart MeetRec: ✒︎ →
+continue with Step 7 (skip Step 6, the token). Otherwise restart MeetRec: MeetRec menu →
 **Quit MeetRec**, then `./meetrec.sh install`. `./meet.sh` reads the file each time, so it needs no
 restart; it follows the configuration unless you pass `nodiar` (off) or `diar`
 (on) as its second argument.
