@@ -1,12 +1,41 @@
 # MeetRec
 
-Local-first macOS meeting recorder and transcription pipeline. It records your
-microphone and the other participants into two separate tracks and transcribes
-them on your Mac. Audio and transcripts never leave the machine.
+Record and transcribe your Mac meetings locally: your voice and the other participants on separate tracks, with remote speakers told apart.
 
-## Quickstart
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform: macOS 13+](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey.svg)
+![Swift](https://img.shields.io/badge/Swift-F05138.svg?logo=swift&logoColor=white)
+![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-3776AB.svg?logo=python&logoColor=white)
 
-macOS 13 or later. About 20 minutes, and roughly 3 GB of downloads.
+<p align="center"><img src="docs/demo.gif" alt="MeetRec demo: start a recording from the menu bar, stop it, open the transcript" width="800"></p>
+
+## Why
+
+Cloud meeting bots and transcription services send your audio off your machine.
+A single mixed recording makes "who said what" unreliable.
+MeetRec keeps everything on your Mac and records you and the other participants separately.
+
+## Features
+
+- Two separate tracks: the microphone (`audio/mic.caf`) and the whole system audio output via ScreenCaptureKit (`audio/system.caf`).
+- Local transcription with `faster-whisper`; the two timelines are merged using the real track start offsets.
+- Your voice is always labelled `ME`. Optional pyannote diarization runs on the system track only and labels remote speakers `REMOTE_01`, `REMOTE_02`, and so on.
+- Menu bar app with language presets, elapsed timer, transcription progress and a macOS notification when a transcript is ready. Optional LaunchAgent to start it at login.
+- Terminal recorder: `./meet.sh`.
+- Persistent job queue with retries and recovery of interrupted jobs.
+- Outputs: TXT, SRT, JSON, Markdown, per-speaker text, and RTTM when diarization ran.
+- Optional `on_stop` hook that runs after the transcript is written.
+- `doctor` command to check the installation.
+
+## Quick start
+
+Requirements:
+
+- macOS 13 or later
+- Xcode Command Line Tools (MeetRec compiles its Swift code locally; there is no prebuilt binary)
+- Python 3.9+
+- A Hugging Face read token, for remote-speaker diarization only
+- About 4 GB of free disk and about 20 minutes
 
 ```bash
 git clone https://github.com/frasal-test/meetrec.git
@@ -14,180 +43,80 @@ cd meetrec
 xcode-select --install    # skip if `swiftc --version` already prints a version
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-diarization.txt
-```
-
-`diarize_system` is **on by default**, so `requirements-diarization.txt` is the
-file that matches the shipped configuration. Installing `requirements.txt`
-alone still transcribes — the session is written without speaker separation and
-carries a warning saying so — but to make that the deliberate choice, set
-`"diarize_system": false` in the [config file](#configuration-and-hook).
-
-Separating remote speakers needs a Hugging Face **read** token. Sign in, accept
-the model conditions on both
-[segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) and
-[speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1),
-then write the token to `.env` in the project root:
-
-```bash
 echo 'HF_TOKEN=hf_your_token_here' > .env
 ```
 
-In **Keychain Access**, create a self-signed certificate named `MeetRec Dev`
-(*Certificate Assistant → Create a Certificate*, Identity Type **Self Signed
-Root**, Certificate Type **Code Signing**). Without it macOS re-asks for
-microphone and screen-recording permission after every rebuild — see
-[Stable signing](#stable-signing). Then build and install:
+Get the token at <https://huggingface.co/settings/tokens> (type: Read). While signed in, accept the conditions on both
+[pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) and
+[pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1).
+
+Create a self-signed code-signing certificate named `MeetRec Dev` in Keychain Access (Certificate Assistant, Create a Certificate, Identity Type: Self Signed Root, Certificate Type: Code Signing). Without it macOS asks for permissions again after every rebuild; see [Stable signing](#stable-signing). Then:
 
 ```bash
 ./meetrec.sh install
 ```
 
-A ✒︎ icon appears in the menu bar. Start a recording from it and grant
-**Microphone** and **Screen & System Audio Recording** when macOS asks, restart
-MeetRec so the screen grant takes effect, and check the result:
+A ✒︎ icon appears in the menu bar. Start a recording from it and grant Microphone and Screen & System Audio Recording when macOS asks. Restart MeetRec so the screen grant takes effect, then check:
 
 ```bash
 ./meetrec.sh doctor
 ```
 
-Wear headphones — otherwise your microphone picks up the other participants
-through the speakers and they are transcribed twice. The first transcription
-downloads the `medium` model (1.4 GB) before producing anything; transcripts
-land in `recordings/<timestamp>/transcripts/`.
+Without diarization: install `requirements.txt` instead of `requirements-diarization.txt`, skip the token, and set `"diarize_system": false` in the [config file](#configuration). With `diarize_system` left on and pyannote missing, transcripts are still produced, with a warning and every remote voice labelled `REMOTE`.
 
-**New to the terminal, or something above did not work?**
-[INSTALL.md](INSTALL.md) walks through the same steps one at a time, with what
-each one should print and how to fix it when it does not.
+Wear headphones, otherwise your microphone picks up the other participants and they are transcribed twice.
 
-## How it works
+[INSTALL.md](INSTALL.md) has the same steps one at a time, with expected output and troubleshooting.
 
-MeetRec records microphone and system audio into **two persistent tracks**,
-transcribes them locally with `faster-whisper`, and merges both timelines using
-their real start offsets. The microphone track is deterministically labelled
-`ME`; optional pyannote diarization is applied only to the system track to
-separate remote participants.
+## Usage
 
-`faster-whisper` is the production transcription engine for every recording
-preset (Italian, English, Spanish and automatic language detection).
-
-Audio and transcripts stay on the Mac.
-
-The menu-bar application captures both audio tracks directly in its own
-process. This gives macOS one stable app identity for Microphone and Screen &
-System Audio permissions. The terminal command uses the same shared Swift
-recording core through a separate CLI executable.
-
-## What changed
-
-- Persistent `mic.caf` and `system.caf` tracks: no destructive pre-transcription
-  mix.
-- Atomic `meta.json` with timestamps, track offsets, duration and session state.
-- Persistent `job.json` queue with retry counters and interrupted-job recovery.
-- Serial worker: a new meeting can start while the previous one transcribes.
-- Combined TXT, SRT, JSON, Markdown, speaker transcript and optional RTTM.
-- Configurable `on_stop` hook.
-- `doctor` diagnostics.
-- Menu-bar daemon with recording timer, persistent transcription progress and
-  LaunchAgent.
-- Speech leveling and filtering (VAD, silence-hallucination removal) on by
-  default, so a quiet microphone is neither invented over nor discarded.
-
-## Requirements
-
-- macOS 13 or later
-- Xcode Command Line Tools
-- Python 3.9+
-- A Hugging Face read token, for remote-speaker diarization only
-- Headphones recommended
-
-`requirements.txt` installs the transcription engine alone;
-`requirements-diarization.txt` adds pyannote and PyTorch for remote-speaker
-separation. Since `diarize_system` defaults to `true`, the second file is the
-one that matches the default configuration.
-
-The [Quickstart](#quickstart) has the commands; [INSTALL.md](INSTALL.md) has the
-same sequence with verification and failure modes for each step.
-
-On first menu-bar recording, grant **MeetRec** access to Screen & System Audio
-Recording and to the Microphone. For terminal-only use, grant the separately
-listed **MeetRec Recorder** process; macOS may also attribute the request to
-Terminal.
-
-### Stable signing
-
-Do this once, or macOS re-asks for permissions after every rebuild.
-
-Without a signing certificate the build falls back to an ad-hoc signature,
-whose designated requirement is the binary's own `cdhash`. Every recompile
-produces a new hash, so the grant macOS stored no longer matches and it prompts
-again — while the old entry stays in the Privacy pane, switched on but inert.
-
-Create a self-signed code-signing certificate:
-
-1. Open **Keychain Access**.
-2. Menu **Keychain Access → Certificate Assistant → Create a Certificate…**
-3. Name: `MeetRec Dev`
-4. Identity Type: **Self Signed Root**
-5. Certificate Type: **Code Signing**
-6. **Create**, then **Done**.
-
-Confirm it is usable — it must appear in:
+### Menu bar
 
 ```bash
-security find-identity -v -p codesigning
+./meetrec.sh run         # build and run in the foreground
+./meetrec.sh install     # build, install a LaunchAgent (starts at login) and start it
+./meetrec.sh uninstall   # disable the LaunchAgent (plist kept as .disabled)
+./meetrec.sh build       # build only
+./meetrec.sh doctor      # check the installation
 ```
 
-If it does not, open it in Keychain Access, expand **Trust**, and set **Code
-Signing** to *Always Trust*.
+The ✒︎ menu has:
 
-Builds pick it up automatically. Override the name with `MEETREC_SIGN_IDENTITY`
-if you prefer a different one.
+- Start recording — Italiano / English / Español / Auto detect
+- Stop recording
+- Open recordings
+- Run doctor
+- Quit MeetRec
 
-If MeetRec had already run ad-hoc signed, clear the grants it left behind so the
-next launch registers cleanly. On a fresh install there is nothing to reset and
-these two commands can be skipped:
+While recording, the menu shows the elapsed time. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The status item shows the percentage and the menu shows a progress bar with the current phase (phase names are in Italian), diarization included. A macOS notification appears when the job finishes.
+
+### Terminal
 
 ```bash
-tccutil reset ScreenCapture com.frasal.meetrec.menubar
+./meet.sh [it|en|es|auto] [diar|nodiar] [num_speakers]
 ```
 
 ```bash
-tccutil reset Microphone com.frasal.meetrec.menubar
-```
-
-Rebuild, restart the agent, and grant the prompts one final time.
-
-## Record from the terminal
-
-```bash
-./meet.sh [language] [diar|nodiar] [remote_speakers]
-```
-
-Examples:
-
-```bash
-./meet.sh
+./meet.sh                # Italian, diarization on
 ./meet.sh en
 ./meet.sh es nodiar
 ./meet.sh auto nodiar
-./meet.sh it diar 2
+./meet.sh it diar 2      # expect two remote speakers
 ```
 
-Press Enter to stop. Recording returns immediately after the session is queued;
-transcription continues in the background. To retain the previous synchronous
-behaviour:
+Press Enter to stop. Transcription is queued and continues in the background. To wait for it instead:
 
 ```bash
 WAIT_FOR_TRANSCRIPT=1 ./meet.sh it diar 2
 ```
 
-## Session format
+### Where files go
 
 ```text
 recordings/
 └── 2026-07-29T10-30-00/
-    ├── meta.json
-    ├── job.json
+    ├── meta.json                  # track offsets, duration, session state
+    ├── job.json                   # queue state, attempts, options
     ├── transcribe.log
     ├── audio/
     │   ├── mic.caf
@@ -195,56 +124,29 @@ recordings/
     └── transcripts/
         ├── transcript.txt
         ├── transcript.srt
-        ├── transcript.json
+        ├── transcript.json        # canonical: per-segment speaker, track, word timestamps
         ├── transcript.md
         ├── transcript.speakers.txt
-        └── transcript.rttm
+        └── transcript.rttm        # only when diarization ran
 ```
 
-`transcript.json` is the canonical output. Every segment contains its timeline,
-speaker and source track. Word timestamps are shifted by the same track offset.
+The default location is `recordings/` in the project folder; see [Configuration](#configuration) before changing it.
 
-## Queue and recovery
+Example of `transcript.md` (illustrative, not a real recording):
 
-```bash
-# Queue or requeue one session
-.venv/bin/python -m meeting_recorder.control enqueue <session>
-.venv/bin/python -m meeting_recorder.control enqueue <session> --force
+```markdown
+**ME** · 00:00:01.200–00:00:04.800
 
-# Process one session synchronously
-.venv/bin/python -m meeting_recorder.control process <session>
+Thanks for joining. Let's start with the release schedule.
 
-# Recover sessions left without a transcript
-.venv/bin/python -m meeting_recorder.control recover
+**REMOTE_01** · 00:00:05.300–00:00:09.100
 
-# Process the pending queue
-.venv/bin/python -m meeting_recorder.control worker --once
+Sure. We are on track for the first of the month.
 ```
 
-When speaker separation cannot run at all — pyannote is not installed, or the
-Hugging Face token is refused — the session is still transcribed, without
-speaker separation and with every remote participant labelled `REMOTE`. Neither
-cause changes on a retry, and a valid recording is worth more than the labels
-put on it. The reason is recorded in `transcript.json` under `warnings` and
-printed at the top of the readable transcripts, so it is visible to whoever
-opens the meeting rather than only to whoever reads the log. Any other failure
-still fails the job and retries, because there a retry is the point.
+## Configuration
 
-Only one worker processes sessions at a time. Every worker pass scans the entire
-pending queue, including sessions left by an earlier failure. The menu-bar app
-also runs a recovery pass when it starts. A job found in `processing` state
-after an interrupted worker is returned to `pending`; failed jobs remain
-retryable on subsequent passes until `max_attempts` is reached.
-
-## Configuration and hook
-
-The optional config file is `~/.config/meetrec/config.json`. Start from
-[`config.example.json`](config.example.json).
-
-`on_stop` is executed after all transcript files have been written. The session
-directory is available both as the first positional argument and as
-`MEETREC_SESSION_DIR`. A failed hook is logged but does not invalidate a valid
-transcript.
+Everything is optional. The file is `~/.config/meetrec/config.json`; start from [`config.example.json`](config.example.json). `.venv/bin/python -m meeting_recorder.control show-config` prints the effective values.
 
 ```json
 {
@@ -253,107 +155,148 @@ transcript.
     "model": "medium",
     "language": "it",
     "compute_type": "int8",
-    "diarize_system": true,
-    "max_attempts": 3,
-    "vad_filter": true,
-    "hallucination_silence_threshold": 2.0,
-    "condition_on_previous_text": true,
-    "normalize_audio": true,
-    "target_speech_dbfs": -20.0
+    "diarize_system": true
   }
 }
 ```
 
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `recordings_dir` | `<project>/recordings` | Where sessions are written and where the worker looks for them. `RECORDINGS_DIR` overrides it. |
+| `on_stop` | `null` | Shell command run after the transcripts are written. |
+| `transcription.enabled` | `true` | `false` keeps the audio and skips transcription; `on_stop` still runs. |
+| `transcription.model` | `"medium"` | Whisper model name. |
+| `transcription.language` | `"it"` | Language code; `null` means auto-detect. |
+| `transcription.compute_type` | `"int8"` | CTranslate2 compute type. `int8` is the fastest; `int8_float32` or `float32` are more accurate on a weak microphone. |
+| `transcription.diarize_system` | `true` | Separate remote speakers with pyannote. |
+| `transcription.word_timestamps` | `true` | Word-level timestamps in the JSON. |
+| `transcription.max_attempts` | `3` | Retries before a job is marked failed. |
+| `transcription.vad_filter` | `true` | Voice activity detection. |
+| `transcription.hallucination_silence_threshold` | `2.0` | Seconds of silence after which a segment is dropped as a hallucination; `null` disables. |
+| `transcription.condition_on_previous_text` | `true` | Condition each window on the previous one. |
+| `transcription.normalize_audio` | `true` | Level speech before decoding. |
+| `transcription.target_speech_dbfs` | `-20.0` | Target speech level. |
+
+Menu bar presets always pass `--model medium` and `--language <preset>` to the worker, so `model` and `language` in the config file do not apply to menu bar recordings. For `meet.sh`, the model comes from `WHISPER_MODEL` and the language from its first argument.
+
+### Environment variables
+
+| Variable | Used by | Meaning |
+| --- | --- | --- |
+| `HF_TOKEN` or `HUGGINGFACE_TOKEN` | worker, `doctor` | Hugging Face token. Normally set in `.env` at the project root. |
+| `RECORDINGS_DIR` | menu bar, `meet.sh`, worker | Where sessions are written and read. Overrides `recordings_dir`; default `<project>/recordings`. |
+| `MEETREC_CONFIG` | `meet.sh` | Config file path. Default `~/.config/meetrec/config.json`. |
+| `WHISPER_MODEL` | `meet.sh` | Whisper model. Default `medium`. |
+| `WAIT_FOR_TRANSCRIPT` | `meet.sh` | `1` to transcribe synchronously. |
+| `MEETREC_SIGN_IDENTITY` | `meetrec.sh` | Signing certificate name. Default `MeetRec Dev`. |
+
+### Where recordings go
+
+The menu bar app, `meet.sh` and the worker all ask the same place, `meeting_recorder.control recordings-dir`, so they always agree. The order is `RECORDINGS_DIR`, then `recordings_dir` in the config file, then `<project>/recordings`. The menu bar app reads the default config file only; `MEETREC_CONFIG` applies to `meet.sh`.
+
+### `on_stop` hook
+
+Runs after all transcript files are written. The session directory is passed as `$1` and as `MEETREC_SESSION_DIR`. A failing hook is logged and the transcript is kept.
+
 ### Speech leveling and filtering
 
-These four settings are **on by default and work as a set**. Whoever wears the
-microphone spends most of a meeting listening, and Whisper handed that silence
-decodes its own priors into filler — one hour-long session produced 88
-identical `Okay.` segments over stretches measuring -80 dBFS. Filtering alone
-is not the answer either: the VAD judges absolute energy, so on a Bluetooth
-headset mic recorded 17 dB below the system track it discarded 82% of the words
-its owner really spoke. Levelling first is what makes filtering safe.
+On by default, and designed to work together. The person wearing the microphone is silent for most of a meeting, and Whisper fed silence invents filler (one session produced 88 identical "Okay." segments over stretches at -80 dBFS). Filtering alone is not enough either: the VAD judges absolute energy, so a headset microphone recorded 17 dB below the system track lost 82% of the words actually spoken. Leveling first is what makes filtering safe.
 
-- `normalize_audio` — brings the speech in each track to `target_speech_dbfs`
-  before decoding. The measurement is gated: near-silent blocks are excluded,
-  so a track that is 79% silence is leveled by what its speech needs rather
-  than by an average the silence dominates.
-- `target_speech_dbfs` — where leveled speech should land. `-20.0` suits
-  speech; peaks are allowed to clip, since a gated measurement deliberately
-  ignores the isolated transients that reach full scale.
-- `vad_filter` — faster-whisper's voice activity detection, which keeps the
-  decoder away from silence. Turn it off only for a recording you would rather
-  over-transcribe than lose.
-- `hallucination_silence_threshold` — seconds of silence after which a segment
-  is discarded as a hallucination, as a backstop to the VAD. `null` disables it.
-- `condition_on_previous_text` — each window is decoded conditioned on the
-  previous one. That keeps a conversation coherent, but also lets one
-  hallucination seed the next window: set it to `false` to break a recording
-  stuck repeating a phrase or emitting segments minutes long.
+- `normalize_audio` / `target_speech_dbfs`: bring speech in each track to the target level before decoding. The level is measured on speech only, with near-silent blocks excluded.
+- `vad_filter`: keeps the decoder away from silence.
+- `hallucination_silence_threshold`: backstop that drops segments produced after long silence.
+- `condition_on_previous_text`: set to `false` if a recording gets stuck repeating a phrase.
 
-`compute_type` accepts any CTranslate2 type. `int8` is the fastest; on Apple
-Silicon `int8_float32` or `float32` transcribe a weak microphone more
-accurately at some cost in speed.
+## How it works
 
-## Doctor
+The menu bar app and `meet.sh` use the same Swift recording core (`RecordingCore.swift`) to capture the microphone and the system audio into two files, plus `meta.json` with the start offsets. Stopping a recording enqueues the session as a `job.json`. A single worker (guarded by a file lock) processes the queue: it levels the speech, transcribes the microphone track (labelled `ME`), transcribes the system track and runs pyannote on it (`REMOTE_n`), then merges both by their real start offsets and writes the outputs.
 
-```bash
-./meetrec.sh doctor
+```mermaid
+flowchart TD
+    A["Menu bar app"] --> C["Swift recorder (shared RecordingCore)"]
+    B["meet.sh"] --> C
+    C --> D["audio/mic.caf"]
+    C --> E["audio/system.caf"]
+    C --> F["meta.json (track offsets)"]
+    D --> G["job.json queue"]
+    E --> G
+    F --> G
+    G --> H["Worker: level speech"]
+    H --> I["faster-whisper on mic -> ME"]
+    H --> J["faster-whisper on system + pyannote -> REMOTE_n"]
+    I --> K["Merge by track offsets"]
+    J --> K
+    K --> L["txt / srt / json / md / speakers / rttm"]
+    L --> M["on_stop hook"]
 ```
 
-It checks macOS, the Swift build, Python models, Hugging Face configuration,
-recordings directory and macOS recording permissions.
+If pyannote is not installed or the Hugging Face token is refused, the session is still transcribed with every remote voice labelled `REMOTE`. The reason is written to `transcript.json` under `warnings` and printed at the top of the TXT, Markdown and speakers files. Other failures fail the job and are retried up to `max_attempts`.
 
-## Menu bar and launch at login
+## Advanced
+
+### Stable signing
+
+Without a signing certificate the build is ad-hoc signed. Its identity is the binary's own hash, which changes on every rebuild, so macOS asks for Microphone and Screen & System Audio Recording again and old entries pile up in Privacy settings.
+
+1. Keychain Access, Certificate Assistant, Create a Certificate.
+2. Name `MeetRec Dev`, Identity Type Self Signed Root, Certificate Type Code Signing.
+3. Check that it is usable:
 
 ```bash
-# Build and run in the foreground
-./meetrec.sh run
-
-# Build, install a LaunchAgent and start it
-./meetrec.sh install
-
-# Disable the LaunchAgent; its plist is preserved as .disabled
-./meetrec.sh uninstall
+security find-identity -v -p codesigning
 ```
 
-The menu bar offers Italian, English, Spanish and automatic-language recording
-presets, plus Stop, elapsed time, recordings folder and doctor. It queues
-transcription with the selected language/model and posts a macOS notification
-when the job completes.
+If it is not listed, open the certificate in Keychain Access, expand Trust, and set Code Signing to Always Trust. Use `MEETREC_SIGN_IDENTITY` for a different certificate name.
 
-While a session is processed, the status item shows the current percentage and
-the menu contains a progress bar with the active phase: faster-whisper model
-loading, microphone transcription, system-audio transcription, pyannote
-loading, remote-speaker diarization, timeline merge and output generation.
-The diarization phase uses an animated indeterminate bar because pyannote does
-not expose a reliable numeric completion percentage.
+If MeetRec ran ad-hoc signed before, clear the stale grants, then rebuild and grant once more:
 
-`./meetrec.sh build` and `./meetrec.sh install` rebuild an executable only
-when its Swift sources or embedded Info.plist changed. This avoids replacing an
-unchanged ad-hoc-signed binary and unnecessarily invalidating macOS privacy
-permission records. The build also applies explicit, stable bundle identifiers
-to the menu-bar application and terminal executable. The generated
-`MeetRec.app` is a standard macOS application bundle and can also be launched
-directly from Finder.
+```bash
+tccutil reset ScreenCapture com.frasal.meetrec.menubar
+tccutil reset Microphone com.frasal.meetrec.menubar
+```
 
-## Privacy and legal note
+`build` and `install` recompile only when the sources changed.
 
-Processing is local. Models are downloaded once and cached locally. The optional
-`on_stop` hook is user-controlled and may change that privacy boundary.
+### Queue and recovery
 
-Recording meetings may require participant consent and compliance with company
-policy and applicable law.
+```bash
+.venv/bin/python -m meeting_recorder.control enqueue <session> [--force]
+.venv/bin/python -m meeting_recorder.control process <session> [--force]   # synchronous
+.venv/bin/python -m meeting_recorder.control recover                       # re-queue interrupted or never-queued sessions
+.venv/bin/python -m meeting_recorder.control worker --once                 # process the pending queue
+.venv/bin/python -m meeting_recorder.control doctor
+.venv/bin/python -m meeting_recorder.control show-config
+```
+
+`enqueue` and `process` accept `--model`, `--language` (a code, or `auto`), `--diarize-system` / `--no-diarize-system` and `--num-speakers`. `--config <path>` goes before the subcommand. The menu bar app runs a recovery pass at launch. Jobs found in `processing` after an interrupted worker go back to `pending`.
+
+### Re-transcribing
+
+Safe to repeat: it overwrites `transcripts/` and never touches `audio/`.
+
+```bash
+.venv/bin/python -m meeting_recorder.control process recordings/2026-07-29T10-30-00 --force
+```
+
+## Known limitations
+
+- macOS only, 13 or later.
+- Build from source: no prebuilt binary and no notarized app. You create the self-signed certificate yourself.
+- The system track captures all system audio (notifications and music included), not a single app.
+- Without headphones, remote voices leak into the microphone and are transcribed twice.
+- Transcription runs on the CPU; GPU acceleration is not used or tested.
+- Diarization applies only to the system track. pyannote uses MPS when available.
+- The first transcription downloads the `medium` model (1.4 GB, cached in `~/.cache/huggingface`); diarization adds 31 MB. The Python environment is about 1.1 GB.
+- The "Permissions as seen by this terminal" line of `doctor` describes Terminal, not MeetRec. Check System Settings, Privacy & Security.
+
+## Privacy and legal
+
+Processing is local. Models are downloaded once and cached. The `on_stop` hook is yours and may send data elsewhere. Recording meetings may require participant consent and compliance with company policy and applicable law.
 
 ## Acknowledgements
 
-The two-track recording architecture, recoverable session model, background
-transcription queue, menu-bar workflow and post-processing hook were inspired
-by [digimata/quill](https://github.com/digimata/quill). MeetRec retains its
-own implementation and combines those architectural ideas with its existing
-multilingual `faster-whisper` pipeline, optional pyannote diarization and
-multi-format transcript outputs.
+The two-track recording, recoverable sessions, background queue, menu bar workflow and post-processing hook were inspired by [digimata/quill](https://github.com/digimata/quill). MeetRec has its own implementation, built around `faster-whisper`, optional pyannote diarization and multi-format outputs.
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
