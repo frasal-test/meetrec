@@ -20,6 +20,8 @@
     <string>1</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 frasal-test · MIT License</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>MeetRec records your microphone as a separate local meeting track.</string>
 	<key>NSScreenCaptureUsageDescription</key>

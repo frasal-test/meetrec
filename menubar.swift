@@ -125,6 +125,12 @@ final class MenuController: NSObject, @unchecked Sendable {
 
     private func rebuildMenu() {
         let menu = NSMenu()
+        menu.addItem(
+            withTitle: "About MeetRec",
+            action: #selector(showAbout),
+            keyEquivalent: ""
+        ).target = self
+        menu.addItem(.separator())
         if processingSessionURL != nil {
             addProgressItem(to: menu)
             menu.addItem(.separator())
@@ -670,6 +676,45 @@ final class MenuController: NSObject, @unchecked Sendable {
         alert.messageText = title
         alert.informativeText = message
         alert.runModal()
+    }
+
+    @objc private func showAbout() {
+        let info = Bundle.main.infoDictionary
+        let shortVersion = (info?["CFBundleShortVersionString"] as? String)
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "dev"
+        let build = info?["CFBundleVersion"] as? String
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: paragraph,
+        ]
+        let credits = NSMutableAttributedString(
+            string: "Local meeting recorder and transcriber for macOS.\n"
+                + "Project folder: \(projectURL.path)\n",
+            attributes: baseAttributes
+        )
+        var linkAttributes = baseAttributes
+        linkAttributes[.link] = URL(string: "https://github.com/frasal-test/meetrec")
+        credits.append(
+            NSAttributedString(
+                string: "github.com/frasal-test/meetrec",
+                attributes: linkAttributes
+            )
+        )
+
+        var options: [NSApplication.AboutPanelOptionKey: Any] = [
+            .applicationName: "MeetRec",
+            .applicationVersion: shortVersion,
+            .credits: credits,
+        ]
+        if let build, !build.isEmpty {
+            options[.version] = build
+        }
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.orderFrontStandardAboutPanel(options: options)
     }
 
     @objc private func quit() {
