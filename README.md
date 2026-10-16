@@ -162,7 +162,7 @@ Everything is optional. The file is `~/.config/meetrec/config.json`; start from 
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `recordings_dir` | `<project>/recordings` | Where the worker looks for sessions. Read this note first: [known bug](#recordings_dir-caveat). |
+| `recordings_dir` | `<project>/recordings` | Where sessions are written and where the worker looks for them. `RECORDINGS_DIR` overrides it. |
 | `on_stop` | `null` | Shell command run after the transcripts are written. |
 | `transcription.enabled` | `true` | `false` keeps the audio and skips transcription; `on_stop` still runs. |
 | `transcription.model` | `"medium"` | Whisper model name. |
@@ -184,17 +184,15 @@ Menu bar presets always pass `--model medium` and `--language <preset>` to the w
 | Variable | Used by | Meaning |
 | --- | --- | --- |
 | `HF_TOKEN` or `HUGGINGFACE_TOKEN` | worker, `doctor` | Hugging Face token. Normally set in `.env` at the project root. |
-| `RECORDINGS_DIR` | menu bar, `meet.sh` | Where new sessions are written. Default `<project>/recordings`. |
+| `RECORDINGS_DIR` | menu bar, `meet.sh`, worker | Where sessions are written and read. Overrides `recordings_dir`; default `<project>/recordings`. |
 | `MEETREC_CONFIG` | `meet.sh` | Config file path. Default `~/.config/meetrec/config.json`. |
 | `WHISPER_MODEL` | `meet.sh` | Whisper model. Default `medium`. |
 | `WAIT_FOR_TRANSCRIPT` | `meet.sh` | `1` to transcribe synchronously. |
 | `MEETREC_SIGN_IDENTITY` | `meetrec.sh` | Signing certificate name. Default `MeetRec Dev`. |
 
-### `recordings_dir` caveat
+### Where recordings go
 
-`recordings_dir` in the config file is read only by the Python worker. The menu bar app and `meet.sh` write sessions to `RECORDINGS_DIR` or `<project>/recordings`. If the two differ, the worker never finds the recordings, so they are never transcribed, while the menu bar still says "Transcript ready". Tracked in [issue #1](https://github.com/frasal-test/meetrec/issues/1).
-
-Until it is fixed, do not set `recordings_dir`. `config.example.json` sets it to `~/Recordings/MeetRec`: remove that line when you copy the file. Or set `RECORDINGS_DIR` to the same path.
+The menu bar app, `meet.sh` and the worker all ask the same place, `meeting_recorder.control recordings-dir`, so they always agree. The order is `RECORDINGS_DIR`, then `recordings_dir` in the config file, then `<project>/recordings`. The menu bar app reads the default config file only; `MEETREC_CONFIG` applies to `meet.sh`.
 
 ### `on_stop` hook
 
@@ -289,7 +287,6 @@ Safe to repeat: it overwrites `transcripts/` and never touches `audio/`.
 - Transcription runs on the CPU; GPU acceleration is not used or tested.
 - Diarization applies only to the system track. pyannote uses MPS when available.
 - The first transcription downloads the `medium` model (1.4 GB, cached in `~/.cache/huggingface`); diarization adds 31 MB. The Python environment is about 1.1 GB.
-- `recordings_dir` in the config file is ignored by the menu bar app and `meet.sh` ([#1](https://github.com/frasal-test/meetrec/issues/1)).
 - The "Permissions as seen by this terminal" line of `doctor` describes Terminal, not MeetRec. Check System Settings, Privacy & Security.
 
 ## Privacy and legal
