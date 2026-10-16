@@ -359,16 +359,13 @@ final class MenuController: NSObject, @unchecked Sendable {
             DispatchQueue.main.async {
                 self.startProgressMonitoring(sessionURL)
             }
-            let worker = runControl([
-                "worker",
-                "--once",
-            ])
+            let succeeded = runWorkerUntilSettled()
             DispatchQueue.main.async {
                 self.pollProgress()
             }
             notify(
                 title: "MeetRec",
-                message: worker == 0
+                message: succeeded
                     ? "Transcript ready: \(sessionURL.lastPathComponent)"
                     : "Transcription needs attention: \(sessionURL.lastPathComponent)"
             )
@@ -380,10 +377,42 @@ final class MenuController: NSObject, @unchecked Sendable {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.startProgressMonitoring(nil)
             }
-            _ = runControl(["worker", "--once"])
+            _ = runWorkerUntilSettled()
             DispatchQueue.main.async {
                 self.pollProgress()
             }
+        }
+    }
+
+    /// `worker --once` makes one attempt per job. A failed attempt leaves the
+    /// job pending for a retry that nothing else would start, and the menu
+    /// would sit on "Nuovo tentativo" forever. Rerun the worker while a job is
+    /// pending; it moves the job to failed once its attempts run out.
+    private func runWorkerUntilSettled() -> Bool {
+        var status = runControl(["worker", "--once"])
+        var runs = 1
+        while status != 0 && runs < 10 && hasPendingJob() {
+            status = runControl(["worker", "--once"])
+            runs += 1
+        }
+        return status == 0
+    }
+
+    private func hasPendingJob() -> Bool {
+        let entries = (try? FileManager.default.contentsOfDirectory(
+            at: recordingsURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        return entries.contains { entry in
+            let jobURL = entry.appendingPathComponent("job.json")
+            guard
+                let data = try? Data(contentsOf: jobURL),
+                let job = try? JSONDecoder().decode(JobStatus.self, from: data)
+            else {
+                return false
+            }
+            return job.state == "pending"
         }
     }
 
