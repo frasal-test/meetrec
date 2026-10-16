@@ -47,6 +47,17 @@ final class MenuController: NSObject, @unchecked Sendable {
     private let statusItem = NSStatusBar.system.statusItem(
         withLength: NSStatusItem.variableLength
     )
+    /// Looked up in the app bundle's Resources, where `meetrec.sh` copies
+    /// them (the `@2x` file is picked up automatically). Nil when the binary
+    /// runs outside the bundle; `setStatus` then falls back to text.
+    private static let idleImage = MenuController.templateImage(
+        named: "MenuBarIdleTemplate",
+        description: "MeetRec"
+    )
+    private static let recordingImage = MenuController.templateImage(
+        named: "MenuBarRecTemplate",
+        description: "MeetRec — recording"
+    )
     private let projectURL: URL
     private let recordingsURL: URL
     private let pythonURL: URL
@@ -118,8 +129,37 @@ final class MenuController: NSObject, @unchecked Sendable {
             ?? projectURL.appendingPathComponent("recordings", isDirectory: true)
     }
 
+    private static func templateImage(
+        named name: String,
+        description: String
+    ) -> NSImage? {
+        let image = NSImage(named: name)
+        image?.isTemplate = true
+        image?.accessibilityDescription = description
+        return image
+    }
+
+    /// Shows the idle or recording icon with `text` beside it. Without the
+    /// bundled image, falls back to the old text glyphs.
+    private func setStatus(recording: Bool, text: String) {
+        guard let button = statusItem.button else { return }
+        let image = recording
+            ? MenuController.recordingImage
+            : MenuController.idleImage
+        if let image {
+            button.image = image
+            button.imagePosition = .imageLeading
+            button.title = text.isEmpty ? "" : " \(text)"
+        } else {
+            button.image = nil
+            button.imagePosition = .noImage
+            let glyph = recording ? "●" : "✒︎"
+            button.title = text.isEmpty ? glyph : "\(glyph) \(text)"
+        }
+    }
+
     private func configureMenu() {
-        statusItem.button?.title = "✒︎"
+        setStatus(recording: false, text: "")
         rebuildMenu()
     }
 
@@ -301,7 +341,7 @@ final class MenuController: NSObject, @unchecked Sendable {
         else {
             return
         }
-        statusItem.button?.title = "…"
+        setStatus(recording: false, text: "…")
         Task { @MainActor [weak self, recorder] in
             do {
                 try await recorder.stop()
@@ -329,7 +369,7 @@ final class MenuController: NSObject, @unchecked Sendable {
         activeSessionURL = nil
         activePreset = nil
         startedAt = nil
-        statusItem.button?.title = "✒︎"
+        setStatus(recording: false, text: "")
         rebuildMenu()
 
         guard status == 0 else {
@@ -507,7 +547,7 @@ final class MenuController: NSObject, @unchecked Sendable {
             progressIndicator?.isIndeterminate = true
             progressIndicator?.startAnimation(nil)
             if activeRecorder == nil {
-                statusItem.button?.title = "✒︎ …"
+                setStatus(recording: false, text: "…")
             }
             return
         }
@@ -527,7 +567,7 @@ final class MenuController: NSObject, @unchecked Sendable {
             progressIndicator?.doubleValue = progress.fraction
         }
         if activeRecorder == nil {
-            statusItem.button?.title = "✒︎ \(percent)%"
+            setStatus(recording: false, text: "\(percent)%")
         }
         progressLabel?.toolTip = progress.detail
     }
@@ -575,7 +615,7 @@ final class MenuController: NSObject, @unchecked Sendable {
         progressLabel = nil
         progressIndicator = nil
         if activeRecorder == nil {
-            statusItem.button?.title = success ? "✒︎ ✓" : "✒︎ !"
+            setStatus(recording: false, text: success ? "✓" : "!")
         }
         rebuildMenu()
         if success {
@@ -583,7 +623,7 @@ final class MenuController: NSObject, @unchecked Sendable {
                 if self.activeRecorder == nil
                     && self.processingSessionURL == nil
                 {
-                    self.statusItem.button?.title = "✒︎"
+                    self.setStatus(recording: false, text: "")
                 }
             }
         }
@@ -624,10 +664,13 @@ final class MenuController: NSObject, @unchecked Sendable {
         ) { [weak self] _ in
             guard let self, let startedAt = self.startedAt else { return }
             let elapsed = Int(Date().timeIntervalSince(startedAt))
-            self.statusItem.button?.title = String(
-                format: "● %02d:%02d",
-                elapsed / 60,
-                elapsed % 60
+            self.setStatus(
+                recording: true,
+                text: String(
+                    format: "%02d:%02d",
+                    elapsed / 60,
+                    elapsed % 60
+                )
             )
         }
     }
