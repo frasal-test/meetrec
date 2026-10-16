@@ -532,6 +532,23 @@ you moved or renamed the project folder after installing: run
 
 Same cause as above — redo Step 5.
 
+### `.venv/bin/pip: bad interpreter`
+
+The project folder was moved or renamed after `.venv` was created. The scripts
+in `.venv/bin` still point at the old location, while `.venv/bin/python` keeps
+working — which is why this guide always runs pip as
+`.venv/bin/python -m pip`. Use that form, or recreate the environment from the
+new location:
+
+```bash
+rm -rf .venv
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -U pip
+.venv/bin/python -m pip install -r requirements-diarization.txt
+```
+
+Then run `./meetrec.sh install` so the LaunchAgent points at the new folder.
+
 ### doctor shows ✗ Python 3.10+, or pip cannot find pyannote.audio>=4
 
 The environment was built with the Python that comes with the Command Line
