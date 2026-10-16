@@ -332,6 +332,20 @@ def prepare_diarization_audio(source: Path) -> Path:
     return wav_path
 
 
+def load_diarization_waveform(path: Path) -> object:
+    """Read our normalized PCM WAV without pyannote's torchcodec decoder."""
+    import numpy as np
+    import torch
+
+    with wave.open(str(path), "rb") as wav:
+        if wav.getnchannels() != 1 or wav.getsampwidth() != 2:
+            raise ValueError("Expected mono 16-bit PCM diarization audio")
+        sample_rate = wav.getframerate()
+        samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+    waveform = torch.from_numpy(samples.astype(np.float32) / 32768.0).unsqueeze(0)
+    return {"waveform": waveform, "sample_rate": sample_rate}
+
+
 TRANSCRIPTION_SAMPLE_RATE = 16000
 # Gate settings for gated_speech_gain_db, following EBU R128's two stages.
 SPEECH_BLOCK_SECONDS = 0.4
@@ -542,9 +556,11 @@ def run_diarization(
     print("Preparing normalized WAV for diarization...", flush=True)
     diarization_audio = prepare_diarization_audio(source)
     try:
+        # pyannote accepts an in-memory waveform. Its path decoder uses
+        # torchcodec, which can fail when the local FFmpeg ABI changes.
         diarization_input = {
             "uri": source.stem,
-            "audio": str(diarization_audio),
+            **load_diarization_waveform(diarization_audio),
         }
         kwargs = diarization_kwargs(args)
         if progress_callback is not None:

@@ -5,9 +5,11 @@ import contextlib
 import io
 import json
 import os
+import struct
 import sys
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -21,6 +23,7 @@ from meeting_recorder.transcription import (
     Word,
     diarization_progress_hook,
     gated_speech_gain_db,
+    load_diarization_waveform,
     transcribe_source,
     write_markdown,
     write_speaker_txt,
@@ -47,6 +50,22 @@ from meeting_recorder.sessions import (
     run_job,
     update_job_progress,
 )
+
+
+class DiarizationAudioTests(unittest.TestCase):
+    def test_normalized_wav_is_passed_as_waveform(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audio.wav"
+            with wave.open(str(path), "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(16000)
+                wav.writeframes(struct.pack("<3h", -32768, 0, 16384))
+
+            audio = load_diarization_waveform(path)
+            self.assertEqual(audio["sample_rate"], 16000)
+            self.assertEqual(audio["waveform"].shape, (1, 3))
+            self.assertEqual(audio["waveform"].tolist(), [[-1.0, 0.0, 0.5]])
 
 
 def write_json(path: Path, value: dict) -> None:
