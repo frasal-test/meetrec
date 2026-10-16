@@ -84,7 +84,7 @@ Requirements:
 
    The first time, macOS may ask whether `codesign` can use the key "MeetRec Dev". Enter your login password and click Always Allow (it can appear twice). Terminal looks stuck until you answer.
 
-7. A ✒︎ icon appears in the menu bar. Start a recording from it and allow Microphone. The first attempt shows "Recording failed"; that is expected, because macOS grants screen recording only after the app restarts. Enable MeetRec in System Settings → Privacy & Security → Screen & System Audio Recording (called Screen Recording on macOS 13 and 14), then restart it: ✒︎ → Quit MeetRec, then
+7. The MeetRec icon (a microphone between sound bars) appears in the menu bar. Start a recording from it and allow Microphone. The first attempt shows "Recording failed"; that is expected, because macOS grants screen recording only after the app restarts. Enable MeetRec in System Settings → Privacy & Security → Screen & System Audio Recording (called Screen Recording on macOS 13 and 14), then restart it: MeetRec menu → Quit MeetRec, then
 
    ```bash
    ./meetrec.sh install
@@ -121,7 +121,7 @@ Wear headphones, otherwise your microphone picks up the other participants and t
 ./meetrec.sh doctor      # check the installation
 ```
 
-The ✒︎ menu has:
+The MeetRec menu has:
 
 - About MeetRec
 - Start recording — Italiano / English / Español / Auto detect
@@ -130,7 +130,7 @@ The ✒︎ menu has:
 - Run doctor
 - Quit MeetRec
 
-While recording, the menu shows the elapsed time. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The status item shows the percentage and the menu shows a progress bar with the current phase (phase names are in Italian), diarization included. A macOS notification appears when the job finishes.
+While recording, the icon's right-hand sound bar becomes a dot and the elapsed time appears next to it. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The icon shows the percentage, then ✓ (or ! if the job failed), and the menu shows a progress bar with the current phase (phase names are in Italian), diarization included. A macOS notification appears when the job finishes.
 
 ### Terminal
 

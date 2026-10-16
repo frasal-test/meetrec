@@ -79,6 +79,28 @@ build_recorder() {
     ensure_signature "$RECORDER" "com.frasal.meetrec.recorder"
 }
 
+# The icon and menu-bar images live in Contents/Resources, which the code
+# signature seals. Copy only what is missing or changed so an unchanged bundle
+# stays byte-identical: re-signing unchanged content reproduces the same
+# signature and keeps the Microphone and Screen Recording grants. The @2x names
+# let NSImage(named:) load both representations.
+sync_menubar_resources() {
+    local icons="$SCRIPT_DIR/assets/icons"
+    local resources="$MENUBAR_APP/Contents/Resources"
+    local pair source target
+    mkdir -p "$resources"
+    for pair in \
+        "AppIcon.icns:AppIcon.icns" \
+        "MenuBarIdleTemplate.png:MenuBarIdleTemplate.png" \
+        "MenuBarIdleTemplate-2x.png:MenuBarIdleTemplate@2x.png" \
+        "MenuBarRecTemplate.png:MenuBarRecTemplate.png" \
+        "MenuBarRecTemplate-2x.png:MenuBarRecTemplate@2x.png"; do
+        source="$icons/${pair%%:*}"
+        target="$resources/${pair#*:}"
+        cmp -s "$source" "$target" || cp "$source" "$target"
+    done
+}
+
 build_menubar() {
     local sources=(
         "$SCRIPT_DIR/RecordingCore.swift"
@@ -96,6 +118,7 @@ build_menubar() {
     else
         echo "Up to date: $MENUBAR_APP"
     fi
+    sync_menubar_resources
     ensure_signature "$MENUBAR_APP" "com.frasal.meetrec.menubar"
 }
 
