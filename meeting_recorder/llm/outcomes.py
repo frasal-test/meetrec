@@ -51,7 +51,7 @@ def provider_name(provider: str) -> str:
 def format_real_cost(amount: Decimal | None) -> str:
     """The cost actually incurred. Unknown stays unknown, never $0."""
     if amount is None:
-        return "costo non disponibile"
+        return "cost unavailable"
     shown = amount.quantize(Decimal("0.0001"), rounding=ROUND_UP)
     return f"${shown}"
 
@@ -83,11 +83,11 @@ def done(
     status: str,
 ) -> Outcome:
     message = (
-        f"Riassunto salvato in {result_path} · {model_label} · "
+        f"Summary saved to {result_path} · {model_label} · "
         f"{format_real_cost(total_cost)}"
     )
     if status == "truncated":
-        message += ". La risposta è stata troncata per limite di lunghezza"
+        message += ". The response was cut short by the length limit"
     return Outcome(
         OutcomeKind.DONE, None, status, message,
         result_path=result_path, run_id=run_id,
@@ -103,15 +103,15 @@ def no_llm(
 ) -> Outcome:
     if reason == "too_short":
         message = (
-            f"Transcript troppo breve per un riassunto, salvato in {transcript_path}"
+            f"Transcript too short for a summary, saved to {transcript_path}"
         )
     elif reason == "no_keys":
-        message = "Transcript salvato. Nessun LLM configurato"
+        message = "Transcript saved. No LLM configured"
     elif reason == "too_long":
-        target = model_label or "un riassunto (oltre ~5 ore)"
-        message = f"Transcript troppo lungo per {target}. Transcript salvato"
+        target = model_label or "a summary (over ~5 hours)"
+        message = f"Transcript too long for {target}. Transcript saved"
     elif reason == "declined":
-        message = "Transcript salvato"
+        message = "Transcript saved"
     else:
         raise ValueError(f"Unknown END_NO_LLM reason: {reason!r}")
     return Outcome(OutcomeKind.END_NO_LLM, reason, None, message, run_id=run_id)
@@ -122,17 +122,17 @@ def error(
 ) -> Outcome:
     service = provider_name(provider)
     messages = {
-        "InsufficientCreditsError": f"Credito esaurito su {service}. Transcript salvato",
-        "AuthError": f"API key di {service} non più valida. Transcript salvato",
+        "InsufficientCreditsError": f"No credit left on {service}. Transcript saved",
+        "AuthError": f"{service} API key no longer valid. Transcript saved",
         "ModelNotFoundError": (
-            f"Modello non più disponibile presso {service}: aggiornare l'app. "
-            "Transcript salvato"
+            f"Model no longer available from {service}: update the app. "
+            "Transcript saved"
         ),
-        "ContentFilteredError": "Il provider ha bloccato la risposta. Transcript salvato",
+        "ContentFilteredError": "The provider blocked the response. Transcript saved",
     }
     message = messages.get(
         error_name,
-        f"Errore durante l'elaborazione ({error_name}). Transcript salvato",
+        f"Error while processing ({error_name}). Transcript saved",
     )
     return Outcome(OutcomeKind.END_ERROR, error_name, None, message, run_id=run_id)
 
@@ -140,11 +140,11 @@ def error(
 def save_error(*, run_id: str, emergency_path: Path | None) -> Outcome:
     if emergency_path is None:
         message = (
-            "Riassunto ottenuto ma non salvato: impossibile scrivere anche "
-            "il file di emergenza"
+            "Summary received but not saved: the emergency file could not "
+            "be written either"
         )
     else:
-        message = f"Risposta salvata in emergenza in {emergency_path}"
+        message = f"Response saved as an emergency copy in {emergency_path}"
     return Outcome(
         OutcomeKind.END_SAVE_ERROR, "save_failed", None, message,
         emergency_path=emergency_path, run_id=run_id,
@@ -156,5 +156,5 @@ def fatal(reason: str, *, run_id: str | None = None) -> Outcome:
     this flow starts; kept here so the five outcomes live in one place."""
     return Outcome(
         OutcomeKind.END_FATAL, reason, None,
-        f"Impossibile salvare il transcript ({reason})", run_id=run_id,
+        f"Could not save the transcript ({reason})", run_id=run_id,
     )

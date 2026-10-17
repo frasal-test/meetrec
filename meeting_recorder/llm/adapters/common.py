@@ -6,7 +6,7 @@ from __future__ import annotations
 CONNECT_TIMEOUT_SECONDS = 10.0
 READ_TIMEOUT_SECONDS = 180.0
 
-CONNECTION_MESSAGE = "Impossibile raggiungere il servizio: controlla la connessione."
+CONNECTION_MESSAGE = "Cannot reach the service: check your connection."
 
 # Explicit endpoints: without them the SDKs read OPENAI_BASE_URL and
 # ANTHROPIC_BASE_URL from the environment, which could send the key and the

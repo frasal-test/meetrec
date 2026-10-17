@@ -140,7 +140,7 @@ struct LLMControl: Sendable {
     /// start when it fails.
     func startupCheck() -> (ok: Bool, problems: [String]) {
         guard let result = runJSON(["startup-check"]) else {
-            return (false, ["startup-check non eseguibile"])
+            return (false, ["startup-check could not run"])
         }
         let problems = (result.object["problems"] as? [String]) ?? []
         let ok = (result.object["ok"] as? Bool) == true && result.status == 0
@@ -177,7 +177,7 @@ struct LLMChoiceScreen: Decodable {
     let responseLanguages: [ResponseLanguage]
 }
 
-/// The answer to ASK_CHOICE. `modelId == nil` is "Nessuno".
+/// The answer to ASK_CHOICE. `modelId == nil` is "None".
 struct LLMChoiceAnswer {
     let modelId: String?
     let responseLanguage: String?
@@ -457,7 +457,7 @@ private func installEditMenuIfNeeded() {
 
 // MARK: - ASK_CHOICE
 
-/// Stato: ASK_CHOICE. The single screen of ui.md: model (or "Nessuno") and
+/// Stato: ASK_CHOICE. The single screen of ui.md: model (or "None") and
 /// response language. Nothing is preselected and nothing is remembered (I5);
 /// there is no default button, so Return does nothing.
 final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
@@ -465,7 +465,7 @@ final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
 
     private let window: NSWindow
     private let models = ExclusiveRadioGroup()
-    /// Parallel to `models.buttons`; nil is "Nessuno".
+    /// Parallel to `models.buttons`; nil is "None".
     private var modelIDs: [String?] = []
     private let languages = NSSegmentedControl()
     private var languageCodes: [String] = []
@@ -501,10 +501,10 @@ final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
             if let spacingAfter { root.setCustomSpacing(spacingAfter, after: view) }
         }
 
-        add(makeLabel("Transcript salvato", size: 16, weight: .semibold))
+        add(makeLabel("Transcript saved", size: 16, weight: .semibold))
         let subtitle = makeLabel(
             "\(screen.transcriptName) · \(screen.language) · "
-                + "~\(screen.wordCount) parole",
+                + "~\(screen.wordCount) words",
             size: 12,
             color: .secondaryLabelColor
         )
@@ -512,7 +512,7 @@ final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
         fixWidth(subtitle, width)
         add(subtitle, spacingAfter: 16)
 
-        add(makeLabel("Elaborare con", size: 12, weight: .semibold), spacingAfter: 4)
+        add(makeLabel("Summarize with", size: 12, weight: .semibold), spacingAfter: 4)
         modelIDs.append(nil)
         add(
             optionRow(
@@ -539,7 +539,7 @@ final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
         }
         models.onSelect = { [weak self] _ in self?.refreshControls() }
 
-        add(makeLabel("Lingua della risposta", size: 12, weight: .semibold), spacingAfter: 4)
+        add(makeLabel("Response language", size: 12, weight: .semibold), spacingAfter: 4)
         languages.segmentCount = screen.responseLanguages.count
         for (index, language) in screen.responseLanguages.enumerated() {
             languages.setLabel(language.label, forSegment: index)
@@ -598,13 +598,13 @@ final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
         models.selectedIndex == 0
     }
 
-    /// "Nessuno" turns the language row off and "Avvia" into "Chiudi";
-    /// "Avvia" needs a model and a language.
+    /// "None" turns the language row off and "Start" into "Close";
+    /// "Start" needs a model and a language.
     private func refreshControls() {
         let selected = models.selectedIndex
         let none = selected == 0
         languages.isEnabled = !none
-        actionButton.title = none ? "Chiudi" : "Avvia"
+        actionButton.title = none ? "Close" : "Start"
         actionButton.isEnabled = none || (selected != nil && languageIndex != nil)
     }
 
@@ -634,7 +634,7 @@ final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
         completion(answer)
     }
 
-    /// Closing the window with the close box is read as "Nessuno": the flow
+    /// Closing the window with the close box is read as "None": the flow
     /// needs an answer, and not choosing a model is the only reading that
     /// cannot send the transcript to a provider by accident (END_NO_LLM,
     /// `declined`). The transcript is already saved either way.
@@ -651,14 +651,14 @@ final class LLMChoiceWindowController: NSObject, NSWindowDelegate {
 
 // MARK: - ASK_RETRY
 
-/// Stato: ASK_RETRY. Message with "Riprova" and "Esci" and no default: Return
+/// Stato: ASK_RETRY. Message with "Retry" and "Cancel" and no default: Return
 /// and Escape do nothing, the user has to click (I10 makes the second attempt
-/// their decision). True = Riprova.
+/// their decision). True = Retry.
 func llmAskRetry(message: String) -> Bool {
     let alert = NSAlert()
     alert.messageText = message
-    let retry = alert.addButton(withTitle: "Riprova")
-    let leave = alert.addButton(withTitle: "Esci")
+    let retry = alert.addButton(withTitle: "Retry")
+    let leave = alert.addButton(withTitle: "Cancel")
     retry.keyEquivalent = ""
     leave.keyEquivalent = ""
     alert.window.defaultButtonCell = nil
@@ -713,8 +713,8 @@ private final class LLMKeyRow {
     let provider: String
     let name: String
     let field = NSSecureTextField()
-    let saveButton = NSButton(title: "Salva", target: nil, action: nil)
-    let removeButton = NSButton(title: "Rimuovi", target: nil, action: nil)
+    let saveButton = NSButton(title: "Save", target: nil, action: nil)
+    let removeButton = NSButton(title: "Remove", target: nil, action: nil)
     let statusLabel = makeLabel("", size: 12, color: .secondaryLabelColor)
     let spinner = NSProgressIndicator()
     var regionPopup: NSPopUpButton?
@@ -746,18 +746,18 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         "us-chicago-1",
         "us-phoenix-1",
     ]
-    private static let regionPlaceholder = "Scegli…"
+    private static let regionPlaceholder = "Choose…"
     private static let contentWidth: CGFloat = 540
 
     private let control: LLMControl
     private var status: LLMSettingsStatus
     private let window: NSWindow
     private let root = NSStackView()
-    static let privacyNotice = "Con un LLM il testo delle riunioni (mai l'audio) viene "
-        + "inviato al servizio scelto: Anthropic, OpenAI o Oracle. Da quel momento il "
-        + "trattamento dei dati è regolato dai termini d'uso, dall'informativa privacy "
-        + "e dagli eventuali accordi (SLA, DPA) di quel servizio, non da MeetRec. "
-        + "Verificali prima di usarlo per riunioni riservate."
+    static let privacyNotice = "With an LLM, the meeting text (never the audio) is "
+        + "sent to the service you choose: Anthropic, OpenAI or Oracle. From then on, "
+        + "your data is governed by that service's terms of use, privacy policy and "
+        + "any agreements you have with it (SLA, DPA), not by MeetRec. Check them "
+        + "before using it for confidential meetings."
     private var rows: [LLMKeyRow] = []
     private let autoCheckbox = NSButton(
         checkboxWithTitle: "Automatic Summary",
@@ -765,7 +765,7 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         action: nil
     )
     private let autoHint = makeLabel(
-        "Salva prima una API key per attivarlo.",
+        "Save an API key first to turn it on.",
         size: 11,
         color: .secondaryLabelColor
     )
@@ -925,14 +925,14 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         row.removeButton.isHidden = !has
         row.field.placeholderString = has ? "••••••••" : nil
         if row.busy {
-            row.statusLabel.stringValue = "Verifica in corso…"
+            row.statusLabel.stringValue = "Verifying…"
             row.statusLabel.textColor = .secondaryLabelColor
             row.spinner.startAnimation(nil)
         } else {
             row.spinner.stopAnimation(nil)
             row.statusLabel.stringValue = has ? "✓" : ""
             row.statusLabel.textColor = .systemGreen
-            row.statusLabel.setAccessibilityLabel(has ? "Key salvata" : nil)
+            row.statusLabel.setAccessibilityLabel(has ? "Key saved" : nil)
         }
     }
 
@@ -956,7 +956,7 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         autoModels.removeAll()
         autoModelIDs = []
         if ticked {
-            autoModelsRow.addArrangedSubview(makeLabel("Modello:", size: 12))
+            autoModelsRow.addArrangedSubview(makeLabel("Model:", size: 12))
             for model in available {
                 let radio = autoModels.addRadio(title: model.label)
                 radio.isEnabled = !autoBusy
@@ -1009,8 +1009,8 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         let key = row.field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             presentAlert(
-                title: "Inserisci la API key",
-                message: "Incolla la key di \(row.name) nel campo, poi premi Salva."
+                title: "Enter the API key",
+                message: "Paste your \(row.name) key into the field, then click Save."
             )
             return
         }
@@ -1018,8 +1018,8 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         if let popup = row.regionPopup {
             guard popup.indexOfSelectedItem > 0, let title = popup.titleOfSelectedItem else {
                 presentAlert(
-                    title: "Scegli la region",
-                    message: "Scegli la region della tua chiave Oracle OCI."
+                    title: "Choose the region",
+                    message: "Choose the region of your Oracle OCI key."
                 )
                 return
             }
@@ -1032,13 +1032,13 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
             return
         }
         let alert = NSAlert()
-        alert.messageText = "Il testo della riunione (non l'audio) verrà inviato a "
-            + "\(row.name) per creare il riassunto."
-        alert.informativeText = "Il trattamento di quel testo è regolato dai termini "
-            + "d'uso e dall'informativa privacy di \(row.name) (o dal contratto "
-            + "aziendale che hai con il servizio), non da MeetRec."
-        let proceed = alert.addButton(withTitle: "Continua")
-        let cancel = alert.addButton(withTitle: "Annulla")
+        alert.messageText = "The meeting text (not the audio) will be sent to "
+            + "\(row.name) to create the summary."
+        alert.informativeText = "That text is governed by the terms of use and "
+            + "privacy policy of \(row.name) (or by your company's agreement with "
+            + "the service), not by MeetRec."
+        let proceed = alert.addButton(withTitle: "Continue")
+        let cancel = alert.addButton(withTitle: "Cancel")
         proceed.keyEquivalent = ""
         cancel.keyEquivalent = ""
         alert.window.defaultButtonCell = nil
@@ -1066,14 +1066,14 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
                         row.field.stringValue = ""
                     } else {
                         self.presentAlert(
-                            title: "Key non salvata",
-                            message: "Impossibile scrivere nel Portachiavi."
+                            title: "Key not saved",
+                            message: "Could not write to the Keychain."
                         )
                     }
                 } else {
                     let message = (result?["message"] as? String)
-                        ?? "Verifica non riuscita: errore interno."
-                    self.presentAlert(title: "Key non salvata", message: message)
+                        ?? "Verification failed: internal error."
+                    self.presentAlert(title: "Key not saved", message: message)
                 }
                 self.refreshAll()
                 self.reloadStatus()
@@ -1086,8 +1086,8 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         let row = rows[sender.tag]
         guard LLMKeychain.remove(row.provider) else {
             presentAlert(
-                title: "Key non rimossa",
-                message: "Impossibile cancellare la voce dal Portachiavi."
+                title: "Key not removed",
+                message: "Could not delete the item from the Keychain."
             )
             return
         }
@@ -1134,7 +1134,7 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
                     self.autoWanted = fresh.automatic
                 } else {
                     self.presentAlert(
-                        title: "Impostazione non salvata",
+                        title: "Setting not saved",
                         message: "Controlla ~/.config/meetrec/config.json."
                     )
                     self.autoWanted = self.status.automatic

@@ -640,7 +640,7 @@ def key_verify_command(
 
         if region not in OCI_SUPPORTED_REGIONS:
             return fail(
-                "Region OCI non supportata. Regioni disponibili: "
+                "OCI region not supported. Available regions: "
                 + ", ".join(OCI_SUPPORTED_REGIONS)
             )
 
@@ -655,8 +655,8 @@ def key_verify_command(
         importlib.invalidate_caches()
         if not installed or not sdk_importable(module):
             return fail(
-                "Impossibile installare i componenti necessari per questo "
-                "servizio. Controlla la connessione e riprova."
+                "Could not install the components this service needs. "
+                "Check your connection and try again."
             )
 
     try:
@@ -707,7 +707,7 @@ def auto_summary_command(
         if find_model(args.model) is None:
             _emit(
                 stdout,
-                {"ok": False, "message": "Modello sconosciuto: scegli un modello dell'elenco."},
+                {"ok": False, "message": "Unknown model: choose one from the list."},
             )
             return 1
         # Only an explicit choice turns it on: the model comes from the

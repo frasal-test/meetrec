@@ -1,7 +1,7 @@
 """The two choice screens of the flow and the JSON-lines bridge to the app (docs/flow/ui.md).
 
 Nothing here carries a preselected value (I5): not for the model, not for the
-language, not for Riprova/Esci.
+language, not for Retry/Cancel.
 """
 from __future__ import annotations
 
@@ -22,15 +22,15 @@ RESPONSE_LANGUAGE_CHOICES = (
 )
 RESPONSE_LANGUAGE_CODES = tuple(code for code, _ in RESPONSE_LANGUAGE_CHOICES)
 
-TOO_LONG_REASON = "transcript troppo lungo"
-NONE_OPTION_LABEL = "Nessuno"
-NONE_OPTION_HINT = "solo transcript"
+TOO_LONG_REASON = "transcript too long"
+NONE_OPTION_LABEL = "None"
+NONE_OPTION_HINT = "transcript only"
 
 _LANGUAGE_LABELS = {
-    "it": "italiano",
-    "en": "inglese",
-    "es": "spagnolo",
-    "auto": "rilevamento automatico",
+    "it": "Italian",
+    "en": "English",
+    "es": "Spanish",
+    "auto": "auto-detect",
 }
 
 
@@ -52,7 +52,7 @@ class ModelOption:
 class ChoiceScreen:
     # The session name: transcript files have the same name in every session.
     transcript_name: str
-    # "rilevamento automatico" for auto.
+    # "auto-detect" for auto.
     language_label: str
     word_count: int
     options: tuple[ModelOption, ...]
@@ -66,7 +66,7 @@ class RetryScreen:
 
 @dataclass(frozen=True)
 class Choice:
-    # None = "Nessuno".
+    # None = "None".
     model_id: str | None
     response_language: str | None
 
@@ -75,7 +75,7 @@ class UserInterface(Protocol):
     def ask_choice(self, screen: ChoiceScreen) -> Choice: ...
 
     def ask_retry(self, screen: RetryScreen) -> bool:
-        """True = Riprova, False = Esci."""
+        """True = Retry, False = Cancel."""
 
     def progress(self, model_label: str) -> None: ...
 
@@ -83,7 +83,7 @@ class UserInterface(Protocol):
 
 
 def language_label(language: str | None) -> str:
-    return _LANGUAGE_LABELS.get(language or "", "lingua non indicata")
+    return _LANGUAGE_LABELS.get(language or "", "language not set")
 
 
 def format_max_cost(amount: Decimal) -> str:
@@ -176,7 +176,7 @@ class JsonLinesUI:
         return choice
 
     def ask_retry(self, screen: RetryScreen) -> bool:
-        """Stato: ASK_RETRY. True = Riprova."""
+        """Stato: ASK_RETRY. True = Retry."""
         self._emit({"event": "ask_retry", "message": screen.message})
         answer = self._read_answer()
         retry = answer.get("retry")

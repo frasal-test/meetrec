@@ -307,7 +307,7 @@ class ErrorMappingTests(AdapterTestCase):
         error = self.call_error(APITimeoutError("Request timed out."))
         self.assertIs(type(error), E.TimeoutLLMError)
         self.assertTrue(error.retryable)
-        self.assertNotIn("connessione", error.user_message)
+        self.assertNotIn("connection", error.user_message)
 
     def test_connection_error_is_a_retryable_timeout_with_the_connection_message(self):
         for provider in ("openai", "oci"):

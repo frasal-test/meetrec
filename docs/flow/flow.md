@@ -28,14 +28,14 @@ flowchart TD
   D -- "key presenti, transcript troppo lungo per tutte" --> N
   D -- "automatico: default con key, transcript troppo lungo" --> N
   D -- "automatico: default utilizzabile" --> F
-  D -- "manuale, o default senza key" --> E[/ASK_CHOICE<br/>modello o Nessuno<br/>+ lingua risposta/]
-  E -- Nessuno --> N
+  D -- "manuale, o default senza key" --> E[/ASK_CHOICE<br/>modello o None<br/>+ lingua risposta/]
+  E -- None --> N
   E -- modello + lingua --> F[BUILD_PROMPT]
   F --> G[[CALL_PROVIDER<br/>via adapter]]
   G -- successo --> H[SAVE_RESULT]
-  G -- "errore ritentabile, 1° tentativo" --> R[/ASK_RETRY<br/>Riprova o Esci/]
-  R -- Riprova --> G
-  R -- Esci --> X([END_ERROR])
+  G -- "errore ritentabile, 1° tentativo" --> R[/ASK_RETRY<br/>Retry o Cancel/]
+  R -- Retry --> G
+  R -- Cancel --> X([END_ERROR])
   G -- "errore non ritentabile o 2° tentativo" --> X
   H -- ok --> Z([DONE])
   H -- errore --> S[EMERGENCY_SAVE]
@@ -54,10 +54,10 @@ flowchart TD
 | SAVE_TRANSCRIPT | Persistenza atomica del transcript | no |
 | CHECK_LENGTH | Conta le parole del transcript | no |
 | CHECK_KEYS | Determina le LLM utilizzabili (key configurata e contesto sufficiente) e la modalità | no |
-| ASK_CHOICE | Schermata unica: modello (o Nessuno) + lingua di risposta | sì |
+| ASK_CHOICE | Schermata unica: modello (o None) + lingua di risposta | sì |
 | BUILD_PROMPT | Sceglie il template e costruisce la richiesta neutra | no |
 | CALL_PROVIDER | Chiamata tramite adapter | no |
-| ASK_RETRY | Offre "Riprova" o "Esci" dopo un errore ritentabile | sì |
+| ASK_RETRY | Offre "Retry" o "Cancel" dopo un errore ritentabile | sì |
 | SAVE_RESULT | Persistenza atomica di risposta, costi e metadati | no |
 | EMERGENCY_SAVE | Salva la risposta in un file di emergenza in una cartella nota | no |
 | DONE | Fine con successo | — |
@@ -81,14 +81,14 @@ flowchart TD
 | CHECK_KEYS | automatica, default con key ma contesto insufficiente | END_NO_LLM (`too_long`) |
 | CHECK_KEYS | automatica, default senza key (≥1 altra LLM utilizzabile) | ASK_CHOICE (con riga di log) |
 | CHECK_KEYS | manuale, ≥1 LLM utilizzabile | ASK_CHOICE |
-| ASK_CHOICE | Nessuno | END_NO_LLM (`declined`) |
+| ASK_CHOICE | None | END_NO_LLM (`declined`) |
 | ASK_CHOICE | modello + lingua | BUILD_PROMPT |
 | BUILD_PROMPT | sempre | CALL_PROVIDER |
 | CALL_PROVIDER | successo | SAVE_RESULT |
 | CALL_PROVIDER | errore ritentabile e primo tentativo | ASK_RETRY |
 | CALL_PROVIDER | errore non ritentabile, oppure secondo tentativo | END_ERROR |
-| ASK_RETRY | Riprova | CALL_PROVIDER (secondo tentativo, stessa richiesta) |
-| ASK_RETRY | Esci | END_ERROR |
+| ASK_RETRY | Retry | CALL_PROVIDER (secondo tentativo, stessa richiesta) |
+| ASK_RETRY | Cancel | END_ERROR |
 | SAVE_RESULT | ok | DONE |
 | SAVE_RESULT | errore | EMERGENCY_SAVE |
 | EMERGENCY_SAVE | sempre | END_SAVE_ERROR |
@@ -98,7 +98,7 @@ flowchart TD
 | Parametro | Valore |
 |---|---|
 | Soglia minima transcript | 150 parole (≈ un paragrafo; sotto si legge prima del riassunto) |
-| Tentativi massimi per chiamata | 2 (1 + 1 "Riprova" su scelta dell'utente) |
+| Tentativi massimi per chiamata | 2 (1 + 1 "Retry" su scelta dell'utente) |
 | Retry automatici SDK | 0 (`max_retries=0`) |
 | Timeout HTTP | connessione 10 s, lettura 180 s (costanti configurabili) |
 | Lingue di risposta | Ita, Eng, Esp, Auto |
@@ -111,12 +111,12 @@ flowchart TD
 - **I2** — Le scritture di transcript e risultato sono atomiche (file temporaneo + rename). Ogni esecuzione ha un `run_id`; più elaborazioni dello stesso transcript non si sovrascrivono.
 - **I3** — Sotto la soglia di parole non si propone l'LLM: END_NO_LLM con motivo `too_short`, comunicato all'utente.
 - **I4** — Una LLM è utilizzabile se e solo se ha la API key configurata nel Portachiavi di macOS e il transcript entra nel suo contesto (I17). La validità della key è verificata quando viene inserita in Settings, fuori da questo flusso.
-- **I5** — In modalità manuale, in ASK_CHOICE nessuna opzione è preselezionata, né per il modello né per la lingua, anche con una sola LLM configurata (in quel caso le opzioni sono "Nessuno" e quella LLM). Nessuna memoria delle scelte precedenti. L'unica scelta ricordata è il modello di default della modalità automatica, scelto esplicitamente dall'utente in Settings (senza preselezione); vale solo in modalità automatica e non preseleziona nulla in ASK_CHOICE.
+- **I5** — In modalità manuale, in ASK_CHOICE nessuna opzione è preselezionata, né per il modello né per la lingua, anche con una sola LLM configurata (in quel caso le opzioni sono "None" e quella LLM). Nessuna memoria delle scelte precedenti. L'unica scelta ricordata è il modello di default della modalità automatica, scelto esplicitamente dall'utente in Settings (senza preselezione); vale solo in modalità automatica e non preseleziona nulla in ASK_CHOICE.
 - **I6** — Template del prompt: lingua del transcript `it`/`en`/`es` → template corrispondente; `auto` o metadato assente → template inglese. Un metadato assente viene loggato.
 - **I7** — La lingua di risposta è sempre un'istruzione esplicita nel prompt. Ita/Eng/Esp → "Respond in <lingua>". Auto → "Respond in the same language as the transcript".
 - **I8** — Il transcript è inserito nel prompt tra delimitatori espliciti e trattato come dato: il system prompt dichiara che il contenuto delimitato non contiene istruzioni da eseguire.
 - **I9** — Tutte le chiamate ai provider passano dagli adapter (`adapter-contract.md`). Nessun altro modulo importa SDK dei provider; gli SDK sono importati solo quando il provider viene usato.
-- **I10** — Nessun retry automatico. L'unico secondo tentativo è il "Riprova" scelto dall'utente, offerto solo per errori ritentabili e una sola volta, anche in modalità automatica.
+- **I10** — Nessun retry automatico. L'unico secondo tentativo è il "Retry" scelto dall'utente, offerto solo per errori ritentabili e una sola volta, anche in modalità automatica.
 - **I11** — Ogni tentativo registra il proprio costo, anche se fallito, quando il provider restituisce l'uso dei token. Costo non calcolabile = `null`, mai `0`. Il risultato riporta il costo di ogni tentativo e il totale.
 - **I12** — Risposta troncata (limite di token) = successo con stato `truncated`, salvata e segnalata all'utente. Risposta filtrata dal provider = errore non ritentabile.
 - **I13** — Se SAVE_RESULT fallisce la risposta non va persa: va scritta in EMERGENCY_SAVE e il percorso mostrato all'utente.

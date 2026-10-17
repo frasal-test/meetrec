@@ -14,10 +14,10 @@ Dopo la trascrizione locale, MeetRec può creare un riassunto (sintesi, decision
 - **Finestra "Settings…"** nella menu bar, fuori dal flusso:
   - API key per Anthropic, OpenAI e Oracle OCI (più la region per OCI, proposta `eu-frankfurt-1`);
   - ogni key si verifica con una chiamata minima quando viene salvata (I4) e finisce nel **Portachiavi di macOS**, mai in `.env` o `config.json`;
-  - avviso prima di salvare la prima key di un servizio: "Il testo della riunione (non l'audio) verrà inviato a <servizio> per creare il riassunto.";
+  - avviso prima di salvare la prima key di un servizio: "The meeting text (not the audio) will be sent to <servizio> to create the summary.";
   - interruttore **Automatic Summary**, spento all'installazione. Per accenderlo l'utente sceglie il modello di default tra quelli con key, senza preselezione.
-- **Modalità manuale** (default): dopo ogni transcript compare ASK_CHOICE, con modello o "Nessuno" e lingua di risposta, senza preselezione (I5).
-- **Modalità automatica**: ASK_CHOICE viene saltata e si usano il modello di default con la lingua di risposta Auto. "Riprova" resta una scelta dell'utente (I10).
+- **Modalità manuale** (default): dopo ogni transcript compare ASK_CHOICE, con modello o "None" e lingua di risposta, senza preselezione (I5).
+- **Modalità automatica**: ASK_CHOICE viene saltata e si usano il modello di default con la lingua di risposta Auto. "Retry" resta una scelta dell'utente (I10).
 - **Un solo modello per servizio**, scelto da noi e fisso nella tabella modelli.
 - **Prezzi e stime in USD.**
 - **Fuori dalla prima versione**: fascia qualità, modello locale (Ollama/MLX), Batch API, voce di menu "elabora un transcript già salvato".

@@ -28,7 +28,7 @@ SCREEN = ChoiceScreen(
     options=(
         ModelOption("claude-haiku-5-5", "Claude Haiku 5.5", "max ~$0.01", True),
         ModelOption(
-            "gpt-6-luna", "GPT-6 Luna", None, False, "transcript troppo lungo"
+            "gpt-6-luna", "GPT-6 Luna", None, False, "transcript too long"
         ),
     ),
 )
@@ -42,7 +42,7 @@ def ui_with(answer: str | None):
 
 class ScreenTests(unittest.TestCase):
     def test_auto_language_is_shown_as_automatic_detection(self):
-        self.assertEqual(language_label("auto"), "rilevamento automatico")
+        self.assertEqual(language_label("auto"), "auto-detect")
 
     def test_screen_has_no_field_for_a_preselected_value(self):
         names = {f.name for f in dataclasses.fields(ChoiceScreen)}
@@ -69,7 +69,7 @@ class JsonLinesUITests(unittest.TestCase):
         event = json.loads(line)
         self.assertEqual(event["event"], "ask_choice")
         screen = event["screen"]
-        self.assertEqual(screen["language"], "rilevamento automatico")
+        self.assertEqual(screen["language"], "auto-detect")
         self.assertEqual(screen["word_count"], 420)
         self.assertEqual(
             [o["model_id"] for o in screen["options"]],
@@ -77,14 +77,14 @@ class JsonLinesUITests(unittest.TestCase):
         )
         self.assertEqual(screen["options"][1]["enabled"], False)
         self.assertEqual(
-            screen["options"][1]["disabled_reason"], "transcript troppo lungo"
+            screen["options"][1]["disabled_reason"], "transcript too long"
         )
         self.assertEqual(screen["options"][0]["max_cost"], "max ~$0.01")
         self.assertEqual(
             [l["label"] for l in screen["response_languages"]],
             ["Ita", "Eng", "Esp", "Auto"],
         )
-        self.assertEqual(screen["none_option"]["label"], "Nessuno")
+        self.assertEqual(screen["none_option"]["label"], "None")
         blob = json.dumps(event).lower()
         for forbidden in ("selected", "preselect", "default", "checked"):
             self.assertNotIn(forbidden, blob)
@@ -120,10 +120,10 @@ class JsonLinesUITests(unittest.TestCase):
     def test_ask_retry(self):
         for answer, expected in (('{"retry": true}', True), ('{"retry": false}', False)):
             ui, out = ui_with(answer)
-            self.assertIs(ui.ask_retry(RetryScreen("Il servizio non ha risposto")), expected)
+            self.assertIs(ui.ask_retry(RetryScreen("The service did not respond")), expected)
             event = json.loads(out.getvalue())
             self.assertEqual(event["event"], "ask_retry")
-            self.assertEqual(event["message"], "Il servizio non ha risposto")
+            self.assertEqual(event["message"], "The service did not respond")
             self.assertNotIn("default", event)
         for answer in ('{}', '{"retry": "yes"}', '{"retry": null}', None):
             with self.subTest(answer=answer):
@@ -156,15 +156,15 @@ class OutcomeMessageTests(unittest.TestCase):
     def test_messages_follow_the_ui_table(self):
         path = Path("/tmp/s/transcripts/transcript.speakers.txt")
         self.assertIn(
-            "Transcript troppo breve per un riassunto, salvato in",
+            "Transcript too short for a summary, saved to",
             outcomes.no_llm("too_short", run_id="r", transcript_path=path).message,
         )
         self.assertEqual(
             outcomes.no_llm("no_keys", run_id="r", transcript_path=path).message,
-            "Transcript salvato. Nessun LLM configurato",
+            "Transcript saved. No LLM configured",
         )
         self.assertIn(
-            "oltre ~5 ore",
+            "over ~5 hours",
             outcomes.no_llm("too_long", run_id="r", transcript_path=path).message,
         )
         self.assertIn(
@@ -175,11 +175,11 @@ class OutcomeMessageTests(unittest.TestCase):
         )
         self.assertEqual(
             outcomes.no_llm("declined", run_id="r", transcript_path=path).message,
-            "Transcript salvato",
+            "Transcript saved",
         )
         self.assertEqual(
             outcomes.error("InsufficientCreditsError", run_id="r", provider="openai").message,
-            "Credito esaurito su OpenAI. Transcript salvato",
+            "No credit left on OpenAI. Transcript saved",
         )
         truncated = outcomes.done(
             run_id="r",
@@ -188,8 +188,8 @@ class OutcomeMessageTests(unittest.TestCase):
             total_cost=None,
             status="truncated",
         )
-        self.assertIn("troncata per limite di lunghezza", truncated.message)
-        self.assertIn("costo non disponibile", truncated.message)
+        self.assertIn("cut short by the length limit", truncated.message)
+        self.assertIn("cost unavailable", truncated.message)
 
 
 if __name__ == "__main__":

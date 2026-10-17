@@ -9,7 +9,7 @@ from .types import Cost, Usage
 
 class LLMError(Exception):
     retryable = False
-    default_message = "Errore durante l'elaborazione."
+    default_message = "Error while processing."
 
     def __init__(
         self,
@@ -26,42 +26,42 @@ class LLMError(Exception):
 
 class TimeoutLLMError(LLMError):
     retryable = True
-    default_message = "Il servizio non ha risposto in tempo."
+    default_message = "The service did not respond in time."
 
 
 class RateLimitError(LLMError):
     retryable = True
-    default_message = "Troppe richieste al servizio in questo momento."
+    default_message = "Too many requests to the service right now."
 
 
 class ProviderError(LLMError):
     retryable = True
-    default_message = "Il servizio è temporaneamente non disponibile."
+    default_message = "The service is temporarily unavailable."
 
 
 class InsufficientCreditsError(LLMError):
-    default_message = "Credito esaurito presso il servizio."
+    default_message = "No credit left with the service."
 
 
 class AuthError(LLMError):
-    default_message = "La API key non è più valida."
+    default_message = "The API key is no longer valid."
 
 
 class ModelNotFoundError(LLMError):
-    default_message = "Il modello non è più disponibile."
+    default_message = "The model is no longer available."
 
 
 class BadRequestError(LLMError):
-    default_message = "Il servizio ha rifiutato la richiesta."
+    default_message = "The service rejected the request."
 
 
 class ContentFilteredError(LLMError):
-    default_message = "Il servizio ha bloccato la risposta."
+    default_message = "The service blocked the response."
 
 
 class InvalidResponseError(LLMError):
-    default_message = "Il servizio ha restituito una risposta non valida."
+    default_message = "The service returned an invalid response."
 
 
 class UnknownLLMError(LLMError):
-    default_message = "Errore imprevisto durante l'elaborazione."
+    default_message = "Unexpected error while processing."

@@ -17,9 +17,9 @@ Tutti i test usano adapter fake e storage controllabile. Nessuna rete, nessuna k
 | T6 | Transcript di 149 parole | END_NO_LLM `too_short`; nessuna schermata |
 | T7 | Transcript di 150 parole | prosegue a CHECK_KEYS |
 | T8 | Nessuna key | END_NO_LLM `no_keys`; nessuna schermata |
-| T9 | Una sola LLM | ASK_CHOICE mostra "Nessuno" + quella LLM, nessuna preselezionata |
+| T9 | Una sola LLM | ASK_CHOICE mostra "None" + quella LLM, nessuna preselezionata |
 | T10 | Più LLM, due esecuzioni consecutive | in entrambe nessuna preselezione, né modello né lingua |
-| T11 | Utente sceglie "Nessuno" | END_NO_LLM `declined`; nessuna chiamata |
+| T11 | Utente sceglie "None" | END_NO_LLM `declined`; nessuna chiamata |
 | T12 | Stima costo | valore = formula di `adapter-contract.md` per input noto, in USD |
 
 ## Prompt
@@ -39,9 +39,9 @@ Tutti i test usano adapter fake e storage controllabile. Nessuna rete, nessuna k
 | T20 | Successo `truncated` | DONE con stato `truncated`; messaggio dedicato |
 | T21 | Modello assente dalla tabella prezzi | `cost.amount is None`, non 0 |
 | T22 | Timeout al 1° tentativo | ASK_RETRY mostrata |
-| T23 | Timeout, Riprova, successo | DONE; due tentativi nel risultato, costo totale = somma |
-| T24 | Timeout, Riprova, timeout | END_ERROR; nessuna terza schermata |
-| T25 | Timeout, Esci | END_ERROR |
+| T23 | Timeout, Retry, successo | DONE; due tentativi nel risultato, costo totale = somma |
+| T24 | Timeout, Retry, timeout | END_ERROR; nessuna terza schermata |
+| T25 | Timeout, Cancel | END_ERROR |
 | T26 | Fake OpenAI: 429 con `insufficient_quota` | `InsufficientCreditsError`; nessuna ASK_RETRY |
 | T27 | Fake OpenAI: 429 per rate limit | `RateLimitError`; ASK_RETRY |
 | T28 | Fake Anthropic: 400 per credito esaurito | `InsufficientCreditsError` |

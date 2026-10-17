@@ -234,7 +234,7 @@ class ErrorMappingTests(AdapterTestCase):
         error = self.call_error(APIConnectionError("Connection error."))
         self.assertIsInstance(error, E.TimeoutLLMError)
         self.assertTrue(error.retryable)
-        self.assertIn("connessione", error.user_message)
+        self.assertIn("connection", error.user_message)
 
     def test_other_400_is_bad_request(self):
         exc = BadRequestError(

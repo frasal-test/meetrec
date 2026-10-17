@@ -844,7 +844,7 @@ final class MenuController: NSObject, @unchecked Sendable {
                         answer(llmAskRetry(message: message))
                     },
                     progress: { [weak self] model in
-                        self?.showLLMProgress("Riassunto con \(model)…")
+                        self?.showLLMProgress("Summarizing with \(model)…")
                     }
                 )
             )
@@ -897,7 +897,7 @@ final class MenuController: NSObject, @unchecked Sendable {
         switch result {
         case .outcome(let outcome):
             message = outcome.message.isEmpty
-                ? "Riassunto non riuscito: errore interno"
+                ? "Summary failed: internal error"
                 : outcome.message
             if outcome.kind == "DONE", let url = outcome.resultPath {
                 lastSummaryURL = url
@@ -907,11 +907,11 @@ final class MenuController: NSObject, @unchecked Sendable {
                 lastEmergencyURL = url
             }
         case .startupCheckFailed:
-            message = "Riassunto non disponibile: controllo iniziale fallito. "
-                + "Esegui doctor"
+            message = "Summary unavailable: startup check failed. "
+                + "Run doctor"
         case .failed:
             // Never the raw output of the process.
-            message = "Riassunto non riuscito: errore interno"
+            message = "Summary failed: internal error"
         }
         rebuildMenu()
         var openPath: String?

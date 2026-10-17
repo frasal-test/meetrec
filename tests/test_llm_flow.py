@@ -198,7 +198,7 @@ class BeforeTheCallTests(FlowTestCase):
         self.assertTrue(by_id["claude-haiku-5-5"].enabled)
         self.assertFalse(by_id["gpt-6-luna"].enabled)
         self.assertEqual(
-            by_id["gpt-6-luna"].disabled_reason, "transcript troppo lungo"
+            by_id["gpt-6-luna"].disabled_reason, "transcript too long"
         )
         self.assertEqual(h.all_adapter_requests(), [])
 
@@ -310,7 +310,7 @@ class SuccessAndErrorTests(FlowTestCase):
         result = h.run()
         self.assertEqual(result.kind, OutcomeKind.DONE)
         self.assertEqual(result.status, "truncated")
-        self.assertIn("troncata", result.message)
+        self.assertIn("cut short", result.message)
         (record,) = h.saved_records()
         self.assertEqual(record["status"], "truncated")
 
@@ -348,7 +348,7 @@ class SuccessAndErrorTests(FlowTestCase):
         self.assertEqual(
             Decimal(record["total_cost"]), first_cost + second_cost
         )
-        # Riprova re-sends the very same request object.
+        # Retry re-sends the very same request object.
         requests = h.adapters["anthropic"].requests
         self.assertEqual(len(requests), 2)
         self.assertIs(requests[0], requests[1])
@@ -382,15 +382,15 @@ class SuccessAndErrorTests(FlowTestCase):
 
     def test_T29_auth_model_not_found_and_filtered_end_directly(self):
         cases = [
-            (AuthError(), "API key di Anthropic non più valida. Transcript salvato"),
+            (AuthError(), "Anthropic API key no longer valid. Transcript saved"),
             (
                 ModelNotFoundError(),
-                "Modello non più disponibile presso Anthropic: aggiornare "
-                "l'app. Transcript salvato",
+                "Model no longer available from Anthropic: update "
+                "the app. Transcript saved",
             ),
             (
                 ContentFilteredError(),
-                "Il provider ha bloccato la risposta. Transcript salvato",
+                "The provider blocked the response. Transcript saved",
             ),
         ]
         for error, message in cases:
@@ -415,13 +415,13 @@ class SuccessAndErrorTests(FlowTestCase):
         )
         result = h.run()
         self.assertEqual(
-            result.message, "Credito esaurito su Anthropic. Transcript salvato"
+            result.message, "No credit left on Anthropic. Transcript saved"
         )
         self.assertEqual(h.ui.retry_screens, [])
         other = outcomes.error("BadRequestError", run_id="r", provider="oci")
         self.assertEqual(
             other.message,
-            "Errore durante l'elaborazione (BadRequestError). Transcript salvato",
+            "Error while processing (BadRequestError). Transcript saved",
         )
 
     def test_T30_unexpected_exception_becomes_unknown_error_without_crash(self):
@@ -501,7 +501,7 @@ class SuccessAndErrorTests(FlowTestCase):
         (record,) = h.saved_records()
         self.assertIsNone(record["total_cost"])
         self.assertIsNone(record["attempts"][0]["cost"])
-        self.assertIn("costo non disponibile", result.message)
+        self.assertIn("cost unavailable", result.message)
 
     def test_T43_automatic_mode_still_offers_ask_retry(self):
         h = self.harness(
