@@ -67,7 +67,8 @@ Regole comuni (`adapter-contract.md`): `max_retries=0`, timeout 10 s per la conn
 - Regioni supportate con l'SDK OpenAI: Frankfurt, Hyderabad, Osaka, Ashburn, Chicago, Phoenix. In **`eu-frankfurt-1`** il modello è ospitato da OCI e il testo resta a Frankfurt. La chiave deve essere nella stessa region del modello.
 - **Contesto**: 128mila token tra prompt e risposta. Con il limite unico di 90mila token di input più la risposta ci si sta; oltre vale comunque I17: il modello risulta disattivato in ASK_CHOICE, oppure in modalità automatica si arriva a END_NO_LLM `too_long`.
 - **Lato amministratore OCI**: creare la chiave in Generative AI → API keys e autorizzarla con una policy IAM ("Add API Key Permissions"). Ogni chiave ha due segreti per la rotazione; il segreto si vede una volta sola.
-- Come segnala OCI il credito esaurito va verificato (nota di `adapter-contract.md`).
+- **Verificato il 17 ottobre 2026** su una tenancy reale in `eu-frankfurt-1`: endpoint `/20231130/actions/v1`, policy IAM, `openai.gpt-oss-120b` on-demand, `max_tokens` accettato, nessun parametro di ragionamento necessario, `usage` restituito. Un riassunto di 2.000 parole: 3.044 token in ingresso, 857 in uscita, $0,001, 5 secondi.
+- Come segnala OCI il credito esaurito va ancora verificato (nota di `adapter-contract.md`).
 
 ## Contesto del codice MeetRec
 
@@ -134,9 +135,9 @@ La finestra Settings è in Swift, quindi il Portachiavi lo gestisce l'app con il
 
 ## Da verificare prima del rilascio
 
-- **OCI gpt-oss-120b**: se l'endpoint accetta `max_tokens` o `max_completion_tokens`, se accetta `reasoning_effort`, e una chiamata minima per verificare la key (non è documentato un endpoint `/models`).
+- **OCI gpt-oss-120b**: come segnala il credito esaurito (il resto è verificato, vedi sezione OCI).
 - **Credito esaurito su OCI**: come lo segnala.
-- **Prova reale su una tenancy OCI** in `eu-frankfurt-1`: endpoint, policy IAM, model id on-demand. Va fatta sul Mac, **mai con la key incollata in chat**.
+- ~~Prova reale su una tenancy OCI~~: fatta il 17 ottobre 2026, riuscita.
 - **Prova di qualità**: 3–5 transcript veri, riassunti con i tre modelli e confrontati.
 - **Compilazione e prova della parte Swift**: possibili solo su macOS.
 

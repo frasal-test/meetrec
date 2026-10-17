@@ -187,8 +187,8 @@ class OpenAICompatibleAdapter:
         error: LLMError | None = None
         try:
             if self._verify_with_ping:
-                # DA VERIFICARE su una tenancy OCI reale: max_tokens and the
-                # minimal payload are accepted.
+                # Verified on a real tenancy (eu-frankfurt-1, 17 Oct 2026):
+                # max_tokens and this minimal payload are accepted.
                 client.chat.completions.create(
                     model=self._model_id,
                     messages=[{"role": "user", "content": "ping"}],
@@ -313,10 +313,12 @@ def make_oci_adapter(
         keystore,
         provider=OCI_PROVIDER,
         model_id=spec.model_id,
-        # DA VERIFICARE su una tenancy OCI reale: Oracle's docs do not name the
-        # output-limit field (max_tokens vs max_completion_tokens) ...
+        # Oracle's docs do not name the output-limit field; max_tokens was
+        # verified on a real tenancy (eu-frankfurt-1, 17 Oct 2026), and the
+        # usage comes back as with OpenAI ...
         token_param="max_tokens",
-        # ... nor a reasoning parameter: none is sent.
+        # ... nor a reasoning parameter: none is sent, and with none the
+        # model left room for the answer (857 output tokens on 2,000 words).
         extra_params={},
         base_url=oci_base_url(region),
         requires_base_url=True,
