@@ -28,14 +28,14 @@ from ..errors import (
 )
 from ..keys import KeyStore
 from ..types import LLMRequest, LLMResponse, Usage
+from .common import (
+    ANTHROPIC_BASE_URL,
+    CONNECT_TIMEOUT_SECONDS,
+    CONNECTION_MESSAGE,
+    READ_TIMEOUT_SECONDS,
+)
 
 PROVIDER = "anthropic"
-
-# docs/flow/flow.md: HTTP timeouts, configurable constants.
-CONNECT_TIMEOUT_SECONDS = 10.0
-READ_TIMEOUT_SECONDS = 180.0
-
-CONNECTION_MESSAGE = "Impossibile raggiungere il servizio: controlla la connessione."
 
 
 def _mentions_credit_balance(exc: Any) -> bool:
@@ -161,6 +161,7 @@ class AnthropicAdapter:
         # by default, which would violate I10.
         return sdk.Anthropic(
             api_key=key,
+            base_url=ANTHROPIC_BASE_URL,
             max_retries=0,
             timeout=sdk.Timeout(READ_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS),
         )

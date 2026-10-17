@@ -29,10 +29,10 @@ Costo stimato per una riunione di 1h: circa 15–20mila token in ingresso (itali
 | `provider` | `model_id` | Prezzo per 1M token (input / output, USD) | `context_window` | Costo per riunione |
 |---|---|---|---|---|
 | `anthropic` | `claude-haiku-5-5` | 0,10 / 0,50 (oltre 100mila token di input: 0,50 / 2,50) | 1M | ~$0,003 |
-| `openai` | `gpt-6-luna` | 0,10 / 0,50 (long context 0,20 / 0,75) | ~1M (da verificare) | ~$0,003 |
+| `openai` | `gpt-6-luna` | 0,10 / 0,50 (oltre 272mila token di input: 0,20 / 0,75) | 1.050.000 (input max 922mila, output max 128mila) | ~$0,003 |
 | `oci` | `openai.gpt-oss-120b` | 0,15 / 0,60 | 128K (prompt + risposta) | ~$0,004 |
 
-La tabella ha un solo prezzo per modello. Per non arrivare mai ai prezzi maggiorati per il long context (Anthropic oltre 100mila token, OpenAI oltre una soglia da verificare), l'app blocca i transcript oltre `MAX_INPUT_TOKENS` = 90mila token stimati, cioè circa 4,5–6 ore di parlato; il margine del 10% sotto la soglia di Anthropic e la stima prudente (caratteri / 3; il tokenizer di Haiku 5.5 conta circa il 30% di token in più dei modelli precedenti) tengono i token reali sotto la soglia: una riunione così lunga è fuori dallo scopo dello strumento (I17, END_NO_LLM `too_long`). Se la soglia di GPT-6 Luna risultasse più bassa, il controllo all'avvio fallisce finché il limite non viene abbassato (T49).
+La tabella ha un solo prezzo per modello. Per non arrivare mai ai prezzi maggiorati per il long context (Anthropic oltre 100mila token, OpenAI oltre 272mila), l'app blocca i transcript oltre `MAX_INPUT_TOKENS` = 90mila token stimati, cioè circa 4,5–6 ore di parlato; il margine del 10% sotto la soglia di Anthropic e la stima prudente (caratteri / 3; il tokenizer di Haiku 5.5 conta circa il 30% di token in più dei modelli precedenti) tengono i token reali sotto la soglia: una riunione così lunga è fuori dallo scopo dello strumento (I17, END_NO_LLM `too_long`). Se un modello futuro avesse una soglia più bassa, il controllo all'avvio fallisce finché il limite non viene abbassato (T49).
 
 Alternative OCI scartate:
 - **gpt-oss-20b** ($0,07 / $0,30): più economico, ma più debole in italiano.
@@ -56,7 +56,8 @@ Regole comuni (`adapter-contract.md`): `max_retries=0`, timeout 10 s per la conn
 
 - SDK Python `openai`. Client `OpenAI(api_key=..., max_retries=0, timeout=...)`.
 - 429 con `insufficient_quota` nel corpo → `InsufficientCreditsError`; 429 senza → `RateLimitError` (T26, T27).
-- **Da verificare prima di scrivere l'adapter**: se Luna supporta Chat Completions o solo Responses API, il parametro per limitare il ragionamento, la soglia del long context e il `context_window` esatto.
+- **Verificato il 17 ottobre 2026** sulla scheda del modello: supporta sia `v1/chat/completions` sia `v1/responses`; contesto 1.050.000 token (input max 922mila, output max 128mila); ragionamento con `reasoning_effort` (`none`, `low`, `medium` default, `high`, `xhigh`, `max`); con ragionamento attivo vanno tolti `temperature`, `top_p` e `top_logprobs`. Long context oltre 272mila token di input.
+- Chiamata: `chat.completions.create(model="gpt-6-luna", messages=[system, user], max_completion_tokens=<max_output_tokens>, reasoning_effort="low")`. `finish_reason`: `length` → `truncated`; `content_filter` o `message.refusal` valorizzato → `ContentFilteredError`.
 
 ### Oracle OCI: `openai.gpt-oss-120b` con OCI Generative AI API key
 
@@ -131,7 +132,7 @@ La finestra Settings è in Swift, quindi il Portachiavi lo gestisce l'app con il
 
 ## Da verificare prima del rilascio
 
-- **GPT-6 Luna**: Chat Completions o Responses API, parametro di ragionamento, soglia del long context, `context_window`.
+- **OCI gpt-oss-120b**: se l'endpoint accetta `max_tokens` o `max_completion_tokens`, se accetta `reasoning_effort`, e una chiamata minima per verificare la key (non è documentato un endpoint `/models`).
 - **Credito esaurito su OCI**: come lo segnala.
 - **Prova reale su una tenancy OCI** in `eu-frankfurt-1`: endpoint, policy IAM, model id on-demand. Va fatta sul Mac, **mai con la key incollata in chat**.
 - **Prova di qualità**: 3–5 transcript veri, riassunti con i tre modelli e confrontati.

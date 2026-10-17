@@ -308,6 +308,8 @@ class ClientConfigTests(AdapterTestCase):
     def assert_client_config(self, client):
         self.assertEqual(client.kwargs["max_retries"], 0)
         self.assertEqual(client.kwargs["api_key"], FAKE_KEY)
+        # Pinned: the SDK would otherwise honour ANTHROPIC_BASE_URL.
+        self.assertEqual(client.kwargs["base_url"], "https://api.anthropic.com")
         timeout = client.kwargs["timeout"]
         self.assertIsInstance(timeout, FakeTimeout)
         self.assertEqual(timeout.timeout, 180.0)
@@ -511,19 +513,15 @@ class ConfiguredAndSdkTests(unittest.TestCase):
 class RegistryAndFlowTests(unittest.TestCase):
     def test_default_registry_creates_the_anthropic_adapter(self):
         registry = default_registry()
-        self.assertEqual(registry.providers(), ("anthropic",))
+        self.assertEqual(registry.providers(), ("anthropic", "openai", "oci"))
         store = InMemoryKeyStore(anthropic=FAKE_KEY)
         adapter = registry.create("anthropic", store)
         self.assertIsInstance(adapter, AnthropicAdapter)
         self.assertTrue(adapter.is_configured())
-        self.assertIsNone(registry.create("openai", store))
+        self.assertIsNone(registry.create("unknown", store))
 
-    def test_startup_check_reports_exactly_openai_and_oci_unregistered(self):
-        problems = startup_check(registry=default_registry())
-        self.assertEqual(
-            sorted(problems),
-            ["adapter not registered: oci", "adapter not registered: openai"],
-        )
+    def test_startup_check_with_the_default_registry_finds_no_problems(self):
+        self.assertEqual(startup_check(registry=default_registry()), [])
 
     def run_flow(self, create):
         tmp = tempfile.TemporaryDirectory()

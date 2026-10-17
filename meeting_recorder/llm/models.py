@@ -53,9 +53,8 @@ MODEL_TABLE: tuple[ModelSpec, ...] = (
         price_output=Decimal("0.50"),
         currency=CURRENCY,
         max_output_tokens=16000,
-        # DA VERIFICARE: soglia long context e context_window di GPT-6 Luna
-        context_window=1_000_000,
-        long_context_threshold=None,
+        context_window=1_050_000,
+        long_context_threshold=272_000,
     ),
     ModelSpec(
         provider="oci",

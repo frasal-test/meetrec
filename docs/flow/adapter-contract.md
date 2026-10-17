@@ -23,7 +23,7 @@ Un solo modello per servizio:
 | `provider` | `model_id` | `price_input` / `price_output` (USD per 1M token) | `context_window` | `long_context_threshold` |
 |---|---|---|---|---|
 | `anthropic` | `claude-haiku-5-5` | 0,10 / 0,50 | 1M | 100K |
-| `openai` | `gpt-6-luna` | 0,10 / 0,50 | ~1M (da verificare) | da verificare |
+| `openai` | `gpt-6-luna` | 0,10 / 0,50 | 1.050.000 | 272K |
 | `oci` | `openai.gpt-oss-120b` | 0,15 / 0,60 | 128K | nessuna |
 
 ## Richiesta neutra
