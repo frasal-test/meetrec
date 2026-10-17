@@ -86,6 +86,12 @@ class MarkdownTests(unittest.TestCase):
         markdown = storage.render_markdown(self.record(), "Claude Haiku 5.5")
         self.assertIn("- Costo: $0.0031 (1 tentativo)", markdown)
 
+    def test_the_service_is_named_not_its_internal_id(self):
+        markdown = storage.render_markdown(self.record(), "Claude Haiku 5.5")
+        self.assertIn("- Servizio: Anthropic\n", markdown)
+        markdown = storage.render_markdown(self.record(provider="oci"), "gpt-oss-120b (OCI)")
+        self.assertIn("- Servizio: Oracle OCI\n", markdown)
+
     def test_two_attempts_and_an_unknown_cost(self):
         markdown = storage.render_markdown(
             self.record(attempts=[{"cost": None}, {"cost": None}], total_cost=None),

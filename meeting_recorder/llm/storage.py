@@ -10,7 +10,7 @@ from typing import Any
 # atomic_write_text lives in sessions (shared with the transcript writers) and
 # is re-exported here so storage.atomic_write_text keeps working.
 from ..sessions import atomic_write_json, atomic_write_text  # noqa: F401
-from .outcomes import format_real_cost
+from .outcomes import format_real_cost, provider_name
 
 
 SUMMARIES_DIR = "summaries"
@@ -78,7 +78,7 @@ def render_markdown(record: dict[str, Any], model_label: str) -> str:
         f"# {labels['title']}",
         "",
         f"- {labels['session']}: {record['transcript_id']}",
-        f"- {labels['service']}: {record['provider']}",
+        f"- {labels['service']}: {provider_name(record['provider'])}",
         f"- {labels['model']}: {model_label}",
         f"- {labels['date']}: {record['created_at']}",
         f"- {labels['cost']}: {_cost_line(record, labels)}",
