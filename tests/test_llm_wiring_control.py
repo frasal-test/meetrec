@@ -598,7 +598,13 @@ class KeyVerifyTests(ControlCase):
             verifier=lambda p, r: SimpleNamespace(verify_key=verify_key),
         )
         self.assertEqual(code, 1)
-        self.assertEqual(json.loads(out), {"ok": False, "message": AuthError().user_message})
+        self.assertEqual(
+            json.loads(out),
+            {
+                "ok": False,
+                "message": "Anthropic did not accept this API key. Check it and try again.",
+            },
+        )
         self.assertNotIn(FAKE_KEY, out + err)
 
     def test_an_unexpected_exception_does_not_show_its_text(self) -> None:
@@ -698,11 +704,13 @@ class KeyVerifyTests(ControlCase):
         def verify_key(key):
             raise AuthError()
 
-        code, _, _, _ = self.verify(
+        code, out, _, _ = self.verify(
             "--provider", "oci", "--region", "eu-frankfurt-1",
             verifier=lambda p, r: SimpleNamespace(verify_key=verify_key),
         )
         self.assertEqual(code, 1)
+        # For OCI a wrong region is rejected like a wrong key: say both.
+        self.assertIn("its region", json.loads(out)["message"])
         self.assertNotIn("summary", self.read_config())
 
     def test_main_reads_the_key_from_stdin_and_prints_only_json(self) -> None:

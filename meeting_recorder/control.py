@@ -30,7 +30,7 @@ from .llm.errors import AuthError, LLMError, UnknownLLMError
 from .llm.flow import run_llm_flow
 from .llm.keys import InMemoryKeyStore, OnDemandKeyStore
 from .llm.models import MODEL_TABLE, find_model
-from .llm.outcomes import OutcomeKind
+from .llm.outcomes import OutcomeKind, provider_name
 from .llm.storage import default_emergency_dir
 from .llm.transcript import load_saved_transcript
 from .llm.ui import JsonLinesUI, ProtocolError
@@ -644,7 +644,7 @@ def key_verify_command(
 
     key = stdin.readline().strip()
     if not key:
-        return fail(AuthError().user_message)
+        return fail("Paste an API key first.")
 
     module = PROVIDER_SDK_MODULES[provider]
     if not sdk_importable(module):
@@ -659,6 +659,16 @@ def key_verify_command(
 
     try:
         (verifier_factory or make_key_verifier)(provider, region).verify_key(key)
+    except AuthError:
+        # A key typed just now was never valid: "no longer valid", the
+        # message of a key revoked later, would be wrong here.
+        service = provider_name(provider)
+        if provider == "oci":
+            return fail(
+                f"{service} did not accept this API key. Check the key and "
+                "its region, then try again."
+            )
+        return fail(f"{service} did not accept this API key. Check it and try again.")
     except LLMError as exc:
         return fail(exc.user_message)
     except Exception:

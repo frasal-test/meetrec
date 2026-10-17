@@ -81,7 +81,7 @@ Nessun messaggio contiene dettagli tecnici grezzi o API key. Il riassunto salvat
 └──────────────────────────────────────────┘
 ```
 
-- Le key vanno nel Portachiavi di macOS. Ogni key è verificata con una chiamata minima quando viene salvata (I4); se la verifica fallisce non viene salvata.
+- Le key vanno nel Portachiavi di macOS. Ogni key è verificata con una chiamata minima quando viene salvata (I4); se la verifica fallisce non viene salvata. Una key rifiutata dal servizio mostra "Key not saved" con "<servizio> did not accept this API key. Check it and try again." (per OCI: "Check the key and its region, then try again."), non il messaggio di una key revocata.
 - Sempre visibile sotto "API key": "With an LLM, the meeting text (never the audio) is sent to the service you choose: Anthropic, OpenAI or Oracle. From then on, your data is governed by that service's terms of use, privacy policy and any agreements you have with it (SLA, DPA), not by MeetRec. Check them before using it for confidential meetings."
 - Prima di salvare la prima key di un servizio: avviso "The meeting text (not the audio) will be sent to <servizio> to create the summary.", con la stessa precisazione sul trattamento dei dati e i bottoni "Continue" e "Cancel".
 - Automatic Summary è spento all'installazione. Attivandolo compare la scelta del modello tra quelli con key, **senza preselezione**: l'interruttore resta spento finché l'utente non sceglie un modello.
