@@ -17,7 +17,11 @@ from meeting_recorder.llm.checks import (  # noqa: E402
     housekeeping,
     startup_check,
 )
-from meeting_recorder.llm.models import MODEL_TABLE, find_model  # noqa: E402
+from meeting_recorder.llm.models import (  # noqa: E402
+    MAX_INPUT_TOKENS,
+    MODEL_TABLE,
+    find_model,
+)
 from meeting_recorder.llm.prompts import TEMPLATES_DIR  # noqa: E402
 
 
@@ -72,7 +76,9 @@ class StartupCheckTests(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("long_context_threshold", problems[0])
         # Equal is fine; no threshold is fine.
-        equal = dataclasses.replace(base, long_context_threshold=100_000)
+        equal = dataclasses.replace(
+            base, long_context_threshold=MAX_INPUT_TOKENS
+        )
         self.assertEqual(self.check(models=(equal,)), [])
         none = dataclasses.replace(base, long_context_threshold=None)
         self.assertEqual(self.check(models=(none,)), [])

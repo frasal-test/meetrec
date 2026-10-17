@@ -10,8 +10,10 @@ from .types import Cost, Usage
 
 
 # One limit for every model, below every long-context price tier (I17), so the
-# table can carry a single price per model.
-MAX_INPUT_TOKENS = 100_000
+# table can carry a single price per model. The tokens are estimated as
+# characters / 4, so the limit keeps 10% below the lowest tier (Anthropic,
+# 100,000) to absorb the estimate's error.
+MAX_INPUT_TOKENS = 90_000
 
 CURRENCY = "USD"
 _MILLION = Decimal(1_000_000)

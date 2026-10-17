@@ -32,7 +32,7 @@ Costo stimato per una riunione di 1h: circa 15–20mila token in ingresso (itali
 | `openai` | `gpt-6-luna` | 0,10 / 0,50 (long context 0,20 / 0,75) | ~1M (da verificare) | ~$0,003 |
 | `oci` | `openai.gpt-oss-120b` | 0,15 / 0,60 | 128K (prompt + risposta) | ~$0,004 |
 
-La tabella ha un solo prezzo per modello. Per non arrivare mai ai prezzi maggiorati per il long context (Anthropic oltre 100mila token, OpenAI oltre una soglia da verificare), l'app blocca i transcript oltre `MAX_INPUT_TOKENS` = 100mila token stimati, cioè circa 5–6 ore di parlato: una riunione così lunga è fuori dallo scopo dello strumento (I17, END_NO_LLM `too_long`). Se la soglia di GPT-6 Luna risultasse più bassa, il controllo all'avvio fallisce finché il limite non viene abbassato (T49).
+La tabella ha un solo prezzo per modello. Per non arrivare mai ai prezzi maggiorati per il long context (Anthropic oltre 100mila token, OpenAI oltre una soglia da verificare), l'app blocca i transcript oltre `MAX_INPUT_TOKENS` = 90mila token stimati, cioè circa 4,5–6 ore di parlato; il margine del 10% sotto la soglia di Anthropic copre l'errore della stima (caratteri / 4): una riunione così lunga è fuori dallo scopo dello strumento (I17, END_NO_LLM `too_long`). Se la soglia di GPT-6 Luna risultasse più bassa, il controllo all'avvio fallisce finché il limite non viene abbassato (T49).
 
 Alternative OCI scartate:
 - **gpt-oss-20b** ($0,07 / $0,30): più economico, ma più debole in italiano.
@@ -64,7 +64,7 @@ Regole comuni (`adapter-contract.md`): `max_retries=0`, timeout 10 s per la conn
 - Stesso SDK `openai`, con `base_url=f"https://inference.generativeai.{region}.oci.oraclecloud.com/20231130/actions/v1"`, poi `chat.completions.create(model="openai.gpt-oss-120b", ...)`.
   - Usare l'endpoint ufficiale `/20231130/actions/v1`, senza project OCID. L'esempio `oracle-samples` usa `/openai/v1` con `project=<OCID>`: le due forme non sono intercambiabili senza verifica.
 - Regioni supportate con l'SDK OpenAI: Frankfurt, Hyderabad, Osaka, Ashburn, Chicago, Phoenix. In **`eu-frankfurt-1`** il modello è ospitato da OCI e il testo resta a Frankfurt. La chiave deve essere nella stessa region del modello.
-- **Contesto**: 128mila token tra prompt e risposta. Con il limite unico di 100mila token di input più la risposta ci si sta; oltre vale comunque I17: il modello risulta disattivato in ASK_CHOICE, oppure in modalità automatica si arriva a END_NO_LLM `too_long`.
+- **Contesto**: 128mila token tra prompt e risposta. Con il limite unico di 90mila token di input più la risposta ci si sta; oltre vale comunque I17: il modello risulta disattivato in ASK_CHOICE, oppure in modalità automatica si arriva a END_NO_LLM `too_long`.
 - **Lato amministratore OCI**: creare la chiave in Generative AI → API keys e autorizzarla con una policy IAM ("Add API Key Permissions"). Ogni chiave ha due segreti per la rotazione; il segreto si vede una volta sola.
 - Come segnala OCI il credito esaurito va verificato (nota di `adapter-contract.md`).
 

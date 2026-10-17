@@ -119,7 +119,7 @@ Il riassunto si assume non più lungo del transcript, quindi la stima è un limi
 
 **Contesto sufficiente** (I17), con la stessa `X`:
 ```
-X ≤ MAX_INPUT_TOKENS            (100.000, costante unica dell'app)
+X ≤ MAX_INPUT_TOKENS            (90.000, costante unica dell'app)
 X + max_output_tokens ≤ context_window
 ```
 `MAX_INPUT_TOKENS` deve restare sotto la soglia oltre la quale un provider applica prezzi long context: la tabella ha un solo prezzo per modello. Il controllo all'avvio verifica che per ogni modello `MAX_INPUT_TOKENS` sia ≤ della soglia long context dichiarata in tabella (`long_context_threshold`, assente se il provider non ne ha una).

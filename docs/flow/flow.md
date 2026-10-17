@@ -102,7 +102,7 @@ flowchart TD
 | Retry automatici SDK | 0 (`max_retries=0`) |
 | Timeout HTTP | connessione 10 s, lettura 180 s (costanti configurabili) |
 | Lingue di risposta | Ita, Eng, Esp, Auto |
-| Limite di input | `MAX_INPUT_TOKENS` = 100.000 token stimati (≈ 5–6 ore di parlato), uguale per tutti i modelli; sotto la soglia dei prezzi long context |
+| Limite di input | `MAX_INPUT_TOKENS` = 90.000 token stimati (≈ 4,5–6 ore di parlato), uguale per tutti i modelli. Il 10% di margine sotto la soglia long context più bassa (100.000, Anthropic) assorbe l'errore della stima caratteri/4 |
 | Contesto sufficiente | token stimati del prompt ≤ `MAX_INPUT_TOKENS` e token stimati del prompt + `max_output_tokens` ≤ `context_window` (vedi `adapter-contract.md`) |
 
 ## Invarianti

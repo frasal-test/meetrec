@@ -40,7 +40,7 @@ class ModelTableTests(unittest.TestCase):
                 ("oci", "openai.gpt-oss-120b"),
             ],
         )
-        self.assertEqual(MAX_INPUT_TOKENS, 100_000)
+        self.assertEqual(MAX_INPUT_TOKENS, 90_000)
         for spec in MODEL_TABLE:
             self.assertEqual(spec.currency, "USD")
             self.assertEqual(spec.max_output_tokens, 16000)
