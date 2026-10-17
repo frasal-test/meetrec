@@ -100,6 +100,8 @@ class BeforeTheCallTests(FlowTestCase):
         self.assertEqual([o.model_id for o in screen.options], ["gpt-6-luna"])
         self.assertTrue(screen.options[0].enabled)
         self.assert_no_preselection(screen)
+        # The session, not "transcript.speakers.txt", which every session has.
+        self.assertEqual(screen.transcript_name, h.session_dir.name)
 
     def test_T10_two_consecutive_runs_have_no_preselection_or_memory(self):
         screens = []
@@ -177,7 +179,7 @@ class BeforeTheCallTests(FlowTestCase):
         self.assertEqual(
             estimate_max_cost(ANTHROPIC, 30_000), Decimal("0.011")
         )
-        self.assertEqual(format_max_cost(Decimal("0.0861")), "max ~$0.09")
+        self.assertEqual(format_max_cost(Decimal("0.0861")), "max ~$0.087")
 
     def test_T41_too_long_model_is_disabled_and_not_selectable(self):
         tight = dataclasses.replace(

@@ -115,7 +115,7 @@ Token mancanti o modello assente dalla tabella → `amount = None`.
 X = token stimati del transcript (caratteri / 3) + token del template
 stima = X × price_input / 1e6 + min(X, max_output_tokens) × price_output / 1e6
 ```
-Il riassunto si assume non più lungo del transcript, quindi la stima è un limite superiore ragionevole. Mostrata nella valuta della tabella, per esempio "max ~$0.09".
+Il riassunto si assume non più lungo del transcript, quindi la stima è un limite superiore ragionevole. Mostrata nella valuta della tabella, per esempio "max ~$0.006".
 
 **Contesto sufficiente** (I17), con la stessa `X`:
 ```

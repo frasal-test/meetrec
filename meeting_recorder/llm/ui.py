@@ -42,7 +42,7 @@ class ProtocolError(Exception):
 class ModelOption:
     model_id: str
     label: str
-    # "max ~$0.09"; None when the option is disabled.
+    # "max ~$0.006"; None when the option is disabled.
     max_cost: str | None
     enabled: bool
     disabled_reason: str | None = None
@@ -50,6 +50,7 @@ class ModelOption:
 
 @dataclass(frozen=True)
 class ChoiceScreen:
+    # The session name: transcript files have the same name in every session.
     transcript_name: str
     # "rilevamento automatico" for auto.
     language_label: str
@@ -86,8 +87,13 @@ def language_label(language: str | None) -> str:
 
 
 def format_max_cost(amount: Decimal) -> str:
-    """"max ~$0.09". Rounded up to the cent: it is an upper bound."""
-    shown = max(amount.quantize(Decimal("0.01"), rounding=ROUND_UP), Decimal("0.01"))
+    """"max ~$0.006", "max ~$0.12". Rounded up: it is an upper bound.
+
+    A meeting usually costs well under a cent, so below $0.10 the estimate
+    keeps a third decimal; rounded to the cent every meeting would read $0.01.
+    """
+    step = Decimal("0.001") if amount < Decimal("0.10") else Decimal("0.01")
+    shown = max(amount.quantize(step, rounding=ROUND_UP), Decimal("0.001"))
     return f"max ~${shown}"
 
 

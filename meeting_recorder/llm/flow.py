@@ -331,7 +331,7 @@ def build_choice_screen(
         for c in candidates
     )
     return ChoiceScreen(
-        transcript_name=run.transcript.path.name,
+        transcript_name=run.transcript.transcript_id,
         language_label=language_label(run.transcript.language),
         word_count=words,
         options=options,

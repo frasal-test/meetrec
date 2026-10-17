@@ -7,12 +7,12 @@ L'app non ha terminale: tutte le interazioni sono menu e bottoni. Due sole scher
 ```
 ┌──────────────────────────────────────────┐
 │ Transcript salvato                       │
-│ <nome file> · <lingua> · ~<N> parole     │
+│ <sessione> · <lingua> · ~<N> parole      │
 │                                          │
 │ Elaborare con                            │
 │ ( ) Nessuno              solo transcript │
-│ ( ) <label modello 1>        max ~$0.09  │
-│ ( ) <label modello 2>        max ~$0.06  │
+│ ( ) <label modello 1>       max ~$0.006  │
+│ ( ) <label modello 2>        max ~$0.12  │
 │  -  <label modello 3>  transcript troppo │
 │                        lungo             │
 │                                          │
@@ -25,7 +25,8 @@ L'app non ha terminale: tutte le interazioni sono menu e bottoni. Due sole scher
 
 - Nessuna opzione preselezionata (I5).
 - Elenco modelli: solo quelli con key configurata, nell'ordine della tabella modelli.
-- Accanto a ogni modello la stima di costo massimo in USD (vedi `adapter-contract.md`).
+- Accanto a ogni modello la stima di costo massimo in USD (vedi `adapter-contract.md`), arrotondata per eccesso: tre decimali sotto $0.10, due sopra.
+- `<sessione>` è il nome della cartella della sessione, perché i file del transcript hanno lo stesso nome in ogni sessione.
 - Un modello con key ma senza contesto sufficiente (I17) appare disattivato, con "transcript troppo lungo", e non è selezionabile.
 - Scelto "Nessuno": la lingua si disattiva, il bottone diventa "Chiudi".
 - "Avvia" è attivo solo con modello + lingua scelti.

@@ -53,8 +53,10 @@ class ScreenTests(unittest.TestCase):
                 self.assertNotIn(forbidden, name)
 
     def test_max_cost_format(self):
-        self.assertEqual(format_max_cost(Decimal("0.09")), "max ~$0.09")
-        self.assertEqual(format_max_cost(Decimal("0.0001")), "max ~$0.01")
+        self.assertEqual(format_max_cost(Decimal("0.0051")), "max ~$0.006")
+        self.assertEqual(format_max_cost(Decimal("0.09")), "max ~$0.090")
+        self.assertEqual(format_max_cost(Decimal("0.0001")), "max ~$0.001")
+        self.assertEqual(format_max_cost(Decimal("0")), "max ~$0.001")
         self.assertEqual(format_max_cost(Decimal("0.101")), "max ~$0.11")
 
 
