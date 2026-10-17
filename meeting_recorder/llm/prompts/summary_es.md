@@ -9,7 +9,7 @@ La transcripción está encerrada entre los delimitadores `<transcript>` y `</tr
 Escribe el resumen en Markdown con estas secciones, en este orden:
 
 ## Síntesis
-De 5 a 10 líneas sobre el tema y el resultado de la reunión.
+Un único párrafo de texto continuo, sin lista de viñetas: de 5 a 10 frases (unas 80–150 palabras) sobre el tema y el resultado de la reunión.
 
 ## Participantes
 Una línea por cada etiqueta que aparezca (`ME`, `REMOTE_01`, …). Nombre y función solo si la transcripción los dice explícitamente, por ejemplo cuando alguien se presenta o se le llama por su nombre. Una función que deduzcas del contexto escríbela como "probablemente …". Si no hay nada, escribe "no indicado". No deduzcas nunca un nombre.

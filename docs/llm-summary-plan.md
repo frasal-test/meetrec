@@ -132,6 +132,7 @@ La finestra Settings è in Swift, quindi il Portachiavi lo gestisce l'app con il
   - non deve inventare nomi o attribuzioni.
 - Struttura di `summaries/<run_id>.md`: in testa sessione, servizio, modello, data e costo; poi **Sintesi** (5–10 righe), **Partecipanti**, **Decisioni**, **Azioni** (chi, cosa, eventuale scadenza) e **Punti aperti**.
 - **Partecipanti** (decisione del 17 ottobre 2026): una riga per etichetta (`ME`, `REMOTE_xx`); nome e ruolo solo se detti esplicitamente nella trascrizione, un ruolo dedotto scritto come "probabilmente …", altrimenti "non indicato"; mai un nome dedotto (template v3).
+- **Sintesi in prosa** (decisione del 17 ottobre 2026): con "da 5 a 10 righe" GPT-6 Luna e gpt-oss-120b scrivevano 5–10 punti di un elenco. Dal template v4 la sezione chiede "un unico paragrafo di testo continuo, senza elenco puntato: da 5 a 10 frasi (circa 80–150 parole)", nelle tre lingue. Da verificare con chiamate reali.
 
 ## Da verificare prima del rilascio
 

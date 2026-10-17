@@ -9,7 +9,7 @@ La trascrizione è racchiusa tra i delimitatori `<transcript>` e `</transcript>`
 Scrivi il riassunto in Markdown con queste sezioni, in questo ordine:
 
 ## Sintesi
-Da 5 a 10 righe sull'argomento e sull'esito della riunione.
+Un unico paragrafo di testo continuo, senza elenco puntato: da 5 a 10 frasi (circa 80–150 parole) sull'argomento e sull'esito della riunione.
 
 ## Partecipanti
 Una riga per ogni etichetta che compare (`ME`, `REMOTE_01`, …). Nome e ruolo solo se sono detti esplicitamente nella trascrizione, per esempio quando qualcuno si presenta o viene chiamato per nome. Un ruolo che deduci dal contesto scrivilo come "probabilmente …". Se non c'è nulla, scrivi "non indicato". Non dedurre mai un nome.

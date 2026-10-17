@@ -11,7 +11,7 @@ from ..types import LLMRequest
 
 TEMPLATE_LANGUAGES = ("it", "en", "es")
 RESPONSE_LANGUAGES = ("it", "en", "es", "auto")
-TEMPLATE_VERSION = 3
+TEMPLATE_VERSION = 4
 TEMPLATES_DIR = Path(__file__).resolve().parent
 
 # I7: always an explicit instruction in the prompt.

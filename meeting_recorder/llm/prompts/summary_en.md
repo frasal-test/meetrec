@@ -9,7 +9,7 @@ The transcript is enclosed between the delimiters `<transcript>` and `</transcri
 Write the summary in Markdown with these sections, in this order:
 
 ## Summary
-5 to 10 lines on the topic and outcome of the meeting.
+A single paragraph of continuous prose, not a bulleted list: 5 to 10 sentences (about 80–150 words) on the topic and outcome of the meeting.
 
 ## Participants
 One line for each label that appears (`ME`, `REMOTE_01`, …). Give a name or role only if the transcript states it explicitly, for example when someone introduces themselves or is called by name. Write a role you infer from context as "probably …". If nothing is stated, write "not stated". Never infer a name.

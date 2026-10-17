@@ -10,7 +10,7 @@ Punto di ripartenza per una nuova sessione. Leggere prima `CLAUDE.md` (regole vi
 
 ## Cosa è fatto (tutto committato e pushato)
 - **Specifica** in `docs/flow/`, aggiornata con tutte le decisioni dell'utente.
-- **Python** (`meeting_recorder/llm/`): tipi, errori normalizzati, tabella modelli, costi, prompt `it`/`en`/`es` (template v3), salvataggio atomico dei risultati in `<sessione>/summaries/<run_id>.json|.md`, salvataggio di emergenza in `~/Library/Application Support/MeetRec/emergency/`, log strutturato in `<sessione>/llm.log`, macchina a stati da CHECK_LENGTH in poi, controllo all'avvio offline con pulizia.
+- **Python** (`meeting_recorder/llm/`): tipi, errori normalizzati, tabella modelli, costi, prompt `it`/`en`/`es` (template v4), salvataggio atomico dei risultati in `<sessione>/summaries/<run_id>.json|.md`, salvataggio di emergenza in `~/Library/Application Support/MeetRec/emergency/`, log strutturato in `<sessione>/llm.log`, macchina a stati da CHECK_LENGTH in poi, controllo all'avvio offline con pulizia.
 - **Adapter**: Anthropic (`claude-haiku-5-5`, effort low) e OpenAI-compatibile per OpenAI (`gpt-6-luna`, Chat Completions, `max_completion_tokens`, `reasoning_effort` low) e OCI (`openai.gpt-oss-120b`, `/20231130/actions/v1`, `max_tokens`). Nessun retry degli SDK, timeout 10/180 s, URL ufficiali fissati.
 - **Collegamento**: il worker esegue SAVE_TRANSCRIPT (scritture atomiche, `language_setting` in `transcript.json`, `TranscriptSaveError`); `control.py` ha `llm-run` (protocollo JSON su stdin/stdout, codici di uscita 0/10/11/12/13/20/21/30), `startup-check`, `doctor` in due fasi, `llm-key-verify`, `auto-summary status|on|off`.
 - **Swift** (`menubar.swift`, `LLMSummary.swift`): Portachiavi (servizio `com.frasal.meetrec.llm`, una voce per provider; le key arrivano al Python solo su stdin), ASK_CHOICE, ASK_RETRY, indicatore di attesa, notifica di esito, finestra Settings con avvertenza privacy sempre visibile, controllo all'avvio, notifiche native (UserNotifications) al posto di `osascript`.
@@ -44,7 +44,7 @@ Cambiato durante i test (tutto committato e pushato):
 1. **Script di prova reale** che l'utente lancia da sé con le proprie key (mai incollate in chat).
 2. **README e INSTALL** per quando si deciderà il rilascio: funzione, nota privacy, `summaries/`, come ottenere le key (per OCI: Console → Generative AI → API keys in Frankfurt, policy IAM da "Add API Key Permissions"), permesso alle notifiche, richiesta della password del Portachiavi dopo ogni aggiornamento.
 3. **Aperti, da decidere con l'utente**:
-   - la Sintesi esce a volte come elenco puntato invece di 5–10 righe;
+   - Sintesi in prosa (template v4, commit di oggi): l'utente la prova con GPT-6 Luna e OCI, i due modelli che con v3 davano un elenco;
    - voce "elabora un transcript già salvato" (fuori ambito, ma utile per confrontare i modelli);
    - come OCI segnala il credito esaurito (non verificabile finché non succede);
    - quando unire la beta a `main` (rilascio).

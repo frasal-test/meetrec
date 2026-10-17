@@ -49,7 +49,7 @@ class TemplateTests(unittest.TestCase):
             with self.subTest(language=language):
                 request = build(language)
                 self.assertEqual(request.template_language, language)
-                self.assertEqual(request.template_id, f"summary-{language}-v3")
+                self.assertEqual(request.template_id, f"summary-{language}-v4")
                 self.assertTrue(
                     request.system_prompt.startswith(load_template(language))
                 )
@@ -57,7 +57,7 @@ class TemplateTests(unittest.TestCase):
     def test_T14_auto_uses_the_english_template(self):
         request = build("auto")
         self.assertEqual(request.template_language, "en")
-        self.assertEqual(request.template_id, "summary-en-v3")
+        self.assertEqual(request.template_id, "summary-en-v4")
 
     def test_T15_missing_metadata_uses_english_and_is_logged(self):
         lines: list[str] = []
@@ -113,6 +113,22 @@ class TemplateTests(unittest.TestCase):
                 prompt = build(language).system_prompt
                 self.assertIn(heading, prompt)
                 self.assertIn(rule, prompt)
+
+    def test_every_template_asks_for_the_summary_as_one_paragraph(self):
+        # "5 to 10 lines" read as 5 to 10 bullet points (v3); the format is
+        # now spelled out, in sentences and words, not lines.
+        expected = {
+            "it": ("## Sintesi", "Un unico paragrafo di testo continuo, senza elenco puntato"),
+            "en": ("## Summary", "A single paragraph of continuous prose, not a bulleted list"),
+            "es": ("## Síntesis", "Un único párrafo de texto continuo, sin lista de viñetas"),
+        }
+        for language, (heading, rule) in expected.items():
+            with self.subTest(language=language):
+                prompt = build(language).system_prompt
+                self.assertIn(f"{heading}\n{rule}", prompt)
+                self.assertNotIn("righe", prompt)
+                self.assertNotIn("lines", prompt)
+                self.assertNotIn("líneas", prompt)
 
     def test_T17_auto_response_follows_the_transcript_language(self):
         request = build("it", response_language="auto")
