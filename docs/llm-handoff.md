@@ -24,6 +24,7 @@ Punto di ripartenza per una nuova sessione. Leggere prima `CLAUDE.md` (regole vi
 - Sezione **Partecipanti**: nome o ruolo solo se detti nel transcript, ruolo dedotto come "probabilmente …", mai un nome dedotto.
 - Titoli delle sezioni e intestazione del `.md` nella lingua di risposta.
 - La beta può essere visibile su GitHub; ciò che si scarica deve restare `main`.
+- Tutta la UI è in inglese, compresa la parte LLM e le fasi della trascrizione; il `.md` del riassunto resta nella lingua di risposta.
 
 ## Provato dall'utente sulla beta (17 ottobre)
 Settings con una, due e tre key (Anthropic, OpenAI, OCI in `eu-frankfurt-1`), ASK_CHOICE con uno e due modelli, modo automatico, transcript troppo corto, riassunti con Anthropic e OCI (OCI verificato: endpoint, policy IAM, `max_tokens`, `usage`). Tutto corretto.
@@ -35,9 +36,8 @@ Settings con una, due e tre key (Anthropic, OpenAI, OCI in `eu-frankfurt-1`), AS
 4. **README e INSTALL** per quando si deciderà il rilascio: funzione, nota privacy, `summaries/`, come ottenere le key (per OCI: Console → Generative AI → API keys in Frankfurt, policy IAM da "Add API Key Permissions").
 5. **Aperti, da decidere con l'utente**:
    - la Sintesi esce a volte come elenco puntato invece di 5–10 righe;
-   - la licenza (oggi MIT, vedi sotto);
    - voce "elabora un transcript già salvato" (fuori ambito, ma utile per confrontare i modelli);
    - come OCI segnala il credito esaurito (non verificabile finché non succede).
 
-## Licenza (discussione aperta)
-Oggi `LICENSE` è MIT: chiunque può prendere il codice, modificarlo, chiuderlo e venderlo, con l'unico obbligo di mantenere la nota di copyright. Opzioni presentate all'utente: GPL-3.0 (chi distribuisce una versione modificata deve pubblicarne il codice con la stessa licenza), AGPL-3.0 (lo stesso anche per chi la offre come servizio in rete), doppia licenza AGPL + commerciale (serve essere titolari di tutto il copyright: i contributi esterni richiedono un CLA), licenze "source available" non open source (PolyForm Noncommercial, Business Source License). Un cambio di licenza vale per le versioni future; v0.9 e v0.9.1 restano MIT.
+## Licenza (decisa il 17 ottobre)
+GPL-3.0 da dopo v0.9.1 (commit `c000c7c` su `main`, portato sulla beta). v0.9 e v0.9.1 restano MIT. Nessun CLA per ora: servirebbe solo per una futura doppia licenza commerciale con contributi esterni.
