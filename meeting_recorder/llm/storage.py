@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 # atomic_write_text lives in sessions (shared with the transcript writers) and
 # is re-exported here so storage.atomic_write_text keeps working.
 from ..sessions import atomic_write_json, atomic_write_text  # noqa: F401
+from .outcomes import format_real_cost
 
 
 SUMMARIES_DIR = "summaries"
@@ -24,6 +26,15 @@ def new_run_id() -> str:
     return f"{stamp}-{secrets.token_hex(4)}"
 
 
+def _cost_line(record: dict[str, Any]) -> str:
+    """Total over every attempt (I11), the way the outcome message shows it."""
+    total = record.get("total_cost")
+    amount = Decimal(total) if total is not None else None
+    attempts = len(record.get("attempts") or [])
+    noun = "tentativo" if attempts == 1 else "tentativi"
+    return f"{format_real_cost(amount)} ({attempts} {noun})"
+
+
 def render_markdown(record: dict[str, Any], model_label: str) -> str:
     """The readable file saved next to the JSON."""
     lines = [
@@ -33,6 +44,7 @@ def render_markdown(record: dict[str, Any], model_label: str) -> str:
         f"- Servizio: {record['provider']}",
         f"- Modello: {model_label}",
         f"- Data: {record['created_at']}",
+        f"- Costo: {_cost_line(record)}",
     ]
     if record["status"] == "truncated":
         lines.append(

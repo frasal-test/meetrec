@@ -113,6 +113,7 @@ build_menubar() {
         cp "$SCRIPT_DIR/Menubar-Info.plist" "$MENUBAR_INFO"
         swiftc -framework AppKit -framework ScreenCaptureKit \
             -framework AVFoundation -framework Security \
+            -framework UserNotifications \
             -O "$SCRIPT_DIR/RecordingCore.swift" \
             "$SCRIPT_DIR/menubar.swift" \
             "$SCRIPT_DIR/LLMSummary.swift" -o "$MENUBAR"

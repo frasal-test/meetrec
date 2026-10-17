@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UserNotifications
 
 private struct RecordingPreset: Sendable {
     let language: String
@@ -84,6 +85,98 @@ private struct JobStatus: Decodable {
         case state
         case progress
         case lastError = "last_error"
+    }
+}
+
+/// Native notifications, so macOS attributes them to MeetRec (not to Script
+/// Editor, as `osascript` did) and a click can open the related file.
+/// Outside the .app bundle UNUserNotificationCenter traps, so there the
+/// message goes to stderr instead.
+final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    static let shared = Notifier()
+
+    private let lock = NSLock()
+    private var warnedDenied = false
+
+    private var available: Bool { Bundle.main.bundleIdentifier != nil }
+
+    /// Call once at app start.
+    func start() {
+        guard available else { return }
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { _, error in
+            if let error = error {
+                FileHandle.standardError.write(
+                    Data("MeetRec: notification authorization error: \(error.localizedDescription)\n".utf8)
+                )
+            }
+        }
+    }
+
+    func post(title: String, message: String, openPath: String?) {
+        guard available else {
+            FileHandle.standardError.write(Data("\(title): \(message)\n".utf8))
+            return
+        }
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .denied {
+                self.lock.lock()
+                let first = !self.warnedDenied
+                self.warnedDenied = true
+                self.lock.unlock()
+                if first {
+                    FileHandle.standardError.write(
+                        Data("MeetRec: notifications are disabled in System Settings\n".utf8)
+                    )
+                }
+                return
+            }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = message
+            content.sound = .default
+            if let openPath = openPath {
+                content.userInfo = ["open": openPath]
+            }
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+            center.add(request) { error in
+                if let error = error {
+                    FileHandle.standardError.write(
+                        Data("MeetRec: could not post notification: \(error.localizedDescription)\n".utf8)
+                    )
+                }
+            }
+        }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler:
+            @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if let path = response.notification.request.content.userInfo["open"] as? String,
+           FileManager.default.fileExists(atPath: path)
+        {
+            DispatchQueue.main.async {
+                NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            }
+        }
+        completionHandler()
     }
 }
 
@@ -821,7 +914,15 @@ final class MenuController: NSObject, @unchecked Sendable {
             message = "Riassunto non riuscito: errore interno"
         }
         rebuildMenu()
-        notify(title: "MeetRec", message: message)
+        var openPath: String?
+        if case .outcome(let outcome) = result {
+            if outcome.kind == "DONE" {
+                openPath = outcome.resultPath?.path
+            } else if outcome.kind == "END_SAVE_ERROR" {
+                openPath = outcome.emergencyPath?.path
+            }
+        }
+        notify(title: "MeetRec", message: message, openPath: openPath)
     }
 
     @objc private func openLastSummary() {
@@ -1151,19 +1252,8 @@ final class MenuController: NSObject, @unchecked Sendable {
         }
     }
 
-    private func notify(title: String, message: String) {
-        let script = "display notification \(shellQuoted(message)) with title \(shellQuoted(title))"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = ["-e", script]
-        try? process.run()
-    }
-
-    private func shellQuoted(_ value: String) -> String {
-        let escaped = value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-        return "\"\(escaped)\""
+    private func notify(title: String, message: String, openPath: String? = nil) {
+        Notifier.shared.post(title: title, message: message, openPath: openPath)
     }
 
     private func showAlert(title: String, message: String) {
@@ -1286,6 +1376,7 @@ private struct MeetRecMenuApplication {
         // app with SIGPIPE.
         signal(SIGPIPE, SIG_IGN)
 
+        Notifier.shared.start()
         let application = NSApplication.shared
         application.setActivationPolicy(.accessory)
         let controller = MenuController(projectURL: projectURL)

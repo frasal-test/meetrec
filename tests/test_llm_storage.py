@@ -66,6 +66,32 @@ class SaveResultTests(unittest.TestCase):
             self.assertEqual(list((session / "summaries").iterdir()), [])
 
 
+class MarkdownTests(unittest.TestCase):
+    def record(self, **changes):
+        record = {
+            "transcript_id": "2026-10-17_10-00-00",
+            "provider": "anthropic",
+            "created_at": "2026-10-17T10:05:00+00:00",
+            "status": "complete",
+            "text": "## Sintesi\nTesto.",
+            "attempts": [{"cost": "0.00305"}],
+            "total_cost": "0.00305",
+        }
+        record.update(changes)
+        return record
+
+    def test_the_summary_shows_the_total_cost(self):
+        markdown = storage.render_markdown(self.record(), "Claude Haiku 5.5")
+        self.assertIn("- Costo: $0.0031 (1 tentativo)", markdown)
+
+    def test_two_attempts_and_an_unknown_cost(self):
+        markdown = storage.render_markdown(
+            self.record(attempts=[{"cost": None}, {"cost": None}], total_cost=None),
+            "Claude Haiku 5.5",
+        )
+        self.assertIn("- Costo: costo non disponibile (2 tentativi)", markdown)
+
+
 class EmergencyTests(unittest.TestCase):
     def test_writes_run_id_json_in_the_given_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
