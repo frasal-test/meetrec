@@ -96,20 +96,42 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
     static let shared = Notifier()
 
     private let lock = NSLock()
-    private var warnedDenied = false
+    private var logURL: URL?
 
     private var available: Bool { Bundle.main.bundleIdentifier != nil }
 
+    /// What happens to notifications goes to the app's log: launched with
+    /// `open`, the app's stderr goes nowhere.
+    private func log(_ message: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        let line = Data("\(ISO8601DateFormatter().string(from: Date())) notifications: \(message)\n".utf8)
+        guard let url = logURL else {
+            FileHandle.standardError.write(line)
+            return
+        }
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        guard let handle = FileHandle(forWritingAtPath: url.path) else { return }
+        defer { handle.closeFile() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: line)
+    }
+
     /// Call once at app start.
-    func start() {
+    func start(logURL: URL) {
+        lock.lock()
+        self.logURL = logURL
+        lock.unlock()
         guard available else { return }
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.requestAuthorization(options: [.alert, .sound]) { _, error in
+        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
             if let error = error {
-                FileHandle.standardError.write(
-                    Data("MeetRec: notification authorization error: \(error.localizedDescription)\n".utf8)
-                )
+                self.log("authorization error: \(error.localizedDescription)")
+            } else if !granted {
+                self.log("not allowed: turn them on in System Settings → Notifications → MeetRec")
             }
         }
     }
@@ -122,16 +144,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             if settings.authorizationStatus == .denied {
-                self.lock.lock()
-                let first = !self.warnedDenied
-                self.warnedDenied = true
-                self.lock.unlock()
-                if first {
-                    FileHandle.standardError.write(
-                        Data("MeetRec: notifications are disabled in System Settings\n".utf8)
-                    )
-                }
+                self.log("not shown, disabled in System Settings: \(message)")
                 return
+            }
+            if settings.alertSetting == .disabled {
+                self.log("delivered without a banner (alert style None): \(message)")
             }
             let content = UNMutableNotificationContent()
             content.title = title
@@ -147,9 +164,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate, @unchecked Sen
             )
             center.add(request) { error in
                 if let error = error {
-                    FileHandle.standardError.write(
-                        Data("MeetRec: could not post notification: \(error.localizedDescription)\n".utf8)
-                    )
+                    self.log("could not post: \(error.localizedDescription)")
                 }
             }
         }
@@ -280,6 +295,9 @@ final class MenuController: NSObject, @unchecked Sendable {
             pythonURL: pythonURL
         )
         super.init()
+        Notifier.shared.start(
+            logURL: recordingsURL.appendingPathComponent(".menubar.log")
+        )
         configureMenu()
         loadDeleteAudioSetting()
         runLLMStartupCheck()
@@ -850,7 +868,7 @@ final class MenuController: NSObject, @unchecked Sendable {
             )
             let result = driver.run(
                 session: sessionURL,
-                keys: LLMKeychain.storedKeys()
+                providers: LLMKeychain.providersWithKey()
             )
             DispatchQueue.main.async {
                 self.finishSummary(result)
@@ -1459,7 +1477,6 @@ private struct MeetRecMenuApplication {
         // app with SIGPIPE.
         signal(SIGPIPE, SIG_IGN)
 
-        Notifier.shared.start()
         let application = NSApplication.shared
         application.setActivationPolicy(.accessory)
         let controller = MenuController(projectURL: projectURL)

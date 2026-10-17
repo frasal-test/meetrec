@@ -57,7 +57,7 @@ Nessun default.
 | END_NO_LLM `too_long` | Transcript too long for a summary (over ~5 hours) / for <modello>. Transcript saved |
 | END_NO_LLM `declined` | Transcript saved |
 | END_ERROR `InsufficientCreditsError` | No credit left on <provider>. Transcript saved |
-| END_ERROR `AuthError` | <provider> API key no longer valid. Transcript saved |
+| END_ERROR `AuthError` | Could not use the <provider> API key: check it in Settings. Transcript saved (key revocata, oppure non letta dal Portachiavi) |
 | END_ERROR `ModelNotFoundError` | Model no longer available from <provider>: update the app. Transcript saved |
 | END_ERROR `ContentFilteredError` | The provider blocked the response. Transcript saved |
 | END_ERROR altri | Error while processing (<tipo>). Transcript saved |

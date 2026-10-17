@@ -382,7 +382,7 @@ class SuccessAndErrorTests(FlowTestCase):
 
     def test_T29_auth_model_not_found_and_filtered_end_directly(self):
         cases = [
-            (AuthError(), "Anthropic API key no longer valid. Transcript saved"),
+            (AuthError(), "Could not use the Anthropic API key: check it in Settings. Transcript saved"),
             (
                 ModelNotFoundError(),
                 "Model no longer available from Anthropic: update "

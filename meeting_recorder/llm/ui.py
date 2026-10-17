@@ -184,6 +184,20 @@ class JsonLinesUI:
             raise ProtocolError("answer has no boolean retry")
         return retry
 
+    def request_key(self, provider: str) -> str | None:
+        """Stato: CALL_PROVIDER. The adapter needs the key of `provider`: the
+        app reads that one Keychain item and answers {"key": <key> | null}.
+        null means it could not be read (for example, access denied)."""
+        self._emit({"event": "need_key", "provider": provider})
+        answer = self._read_answer()
+        if "key" not in answer:
+            raise ProtocolError("answer has no key")
+        key = answer["key"]
+        if key is not None and not isinstance(key, str):
+            # Never repeats the value: it could be a key.
+            raise ProtocolError("key must be a string or null")
+        return key
+
     def progress(self, model_label: str) -> None:
         """Stato: CALL_PROVIDER (waiting indicator)."""
         self._emit({"event": "progress", "model": model_label})

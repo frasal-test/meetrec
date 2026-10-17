@@ -264,8 +264,12 @@ class LlmRunCase(ControlCase):
         )
 
     @staticmethod
-    def keys_line(**keys: str) -> str:
-        return json.dumps({"type": "keys", "keys": keys}) + "\n"
+    def providers_line(*providers: str) -> str:
+        return json.dumps({"type": "providers", "providers": list(providers)}) + "\n"
+
+    @staticmethod
+    def key_answer(key: str | None = FAKE_KEY) -> str:
+        return json.dumps({"key": key}) + "\n"
 
     @staticmethod
     def answer(model_id, language="it") -> str:
@@ -288,13 +292,20 @@ class LlmRunCase(ControlCase):
 
 
 class LlmRunTests(LlmRunCase):
-    def test_keys_choice_answer_outcome_done(self) -> None:
-        stdin = self.keys_line(anthropic=FAKE_KEY) + self.answer("claude-haiku-5-5")
+    def test_T50_providers_choice_key_outcome_done(self) -> None:
+        stdin = (
+            self.providers_line("anthropic")
+            + self.answer("claude-haiku-5-5")
+            + self.key_answer()
+        )
         code, events, _ = self.run_llm(stdin)
         self.assertEqual(code, 0)
         self.assertEqual(
-            [e["event"] for e in events], ["ask_choice", "progress", "outcome"]
+            [e["event"] for e in events],
+            ["ask_choice", "progress", "need_key", "outcome"],
         )
+        # Only the chosen provider's key is asked for, after the choice.
+        self.assertEqual(events[2], {"event": "need_key", "provider": "anthropic"})
         options = events[0]["screen"]["options"]
         # Only the provider that has a key is offered, with no preselection.
         self.assertEqual([o["model_id"] for o in options], ["claude-haiku-5-5"])
@@ -302,16 +313,18 @@ class LlmRunTests(LlmRunCase):
         self.assertEqual(len(self.summaries()), 1)
         self.assertEqual(len(self.adapters["anthropic"].requests), 1)
 
-    def test_declined_exits_with_the_no_llm_code(self) -> None:
-        stdin = self.keys_line(anthropic=FAKE_KEY) + self.answer(None, None)
+    def test_T50_declined_exits_with_the_no_llm_code_and_reads_no_key(self) -> None:
+        stdin = self.providers_line("anthropic") + self.answer(None, None)
         code, events, _ = self.run_llm(stdin)
         self.assertEqual(code, control.LLM_RUN_EXIT_CODES[OutcomeKind.END_NO_LLM])
         self.assertEqual(events[-1]["kind"], "END_NO_LLM")
         self.assertEqual(events[-1]["reason"], "declined")
+        # "None" reads no key at all.
+        self.assertNotIn("need_key", [e["event"] for e in events])
         self.assertEqual(self.adapters["anthropic"].requests, [])
 
     def test_no_keys_needs_no_answer(self) -> None:
-        code, events, _ = self.run_llm(self.keys_line())
+        code, events, _ = self.run_llm(self.providers_line())
         self.assertEqual(code, control.LLM_RUN_EXIT_CODES[OutcomeKind.END_NO_LLM])
         self.assertEqual(events[-1]["reason"], "no_keys")
 
@@ -319,7 +332,11 @@ class LlmRunTests(LlmRunCase):
         (self.session / "transcripts" / "transcript.json").write_text(
             json.dumps({"language_setting": "es"}), encoding="utf-8"
         )
-        stdin = self.keys_line(anthropic=FAKE_KEY) + self.answer("claude-haiku-5-5")
+        stdin = (
+            self.providers_line("anthropic")
+            + self.answer("claude-haiku-5-5")
+            + self.key_answer()
+        )
         self.run_llm(stdin)
         request = self.adapters["anthropic"].requests[0]
         self.assertEqual(request.template_language, "es")
@@ -328,16 +345,20 @@ class LlmRunTests(LlmRunCase):
         self.write_config(
             {"summary": {"automatic": True, "default_model": "claude-haiku-5-5"}}
         )
-        code, events, _ = self.run_llm(self.keys_line(anthropic=FAKE_KEY))
+        code, events, _ = self.run_llm(
+            self.providers_line("anthropic") + self.key_answer()
+        )
         self.assertEqual(code, 0)
-        self.assertEqual([e["event"] for e in events], ["progress", "outcome"])
+        self.assertEqual(
+            [e["event"] for e in events], ["progress", "need_key", "outcome"]
+        )
 
     def test_startup_check_failure_does_not_start_the_flow(self) -> None:
         out = io.StringIO()
         args = argparse.Namespace(config=self.config, session=self.session)
         code = control.run_llm_command(
             args,
-            io.StringIO(self.keys_line(anthropic=FAKE_KEY)),
+            io.StringIO(self.providers_line("anthropic")),
             out,
             registry_factory=incomplete_registry_factory,
             emergency_dir=self.emergency,
@@ -349,16 +370,18 @@ class LlmRunTests(LlmRunCase):
         self.assertEqual(len(self.lines(out.getvalue())), 1)
         self.assertFalse((self.session / "llm.log").exists())
 
-    def test_malformed_keys_lines_are_protocol_errors(self) -> None:
+    def test_malformed_providers_lines_are_protocol_errors(self) -> None:
         bad_lines = [
             "",
             "\n",
             "not json\n",
             "[1, 2]\n",
-            json.dumps({"type": "other", "keys": {}}) + "\n",
-            json.dumps({"type": "keys"}) + "\n",
-            json.dumps({"type": "keys", "keys": ["a"]}) + "\n",
-            json.dumps({"type": "keys", "keys": {"anthropic": 5}}) + "\n",
+            json.dumps({"type": "other", "providers": []}) + "\n",
+            json.dumps({"type": "providers"}) + "\n",
+            json.dumps({"type": "providers", "providers": {"anthropic": "x"}}) + "\n",
+            json.dumps({"type": "providers", "providers": ["anthropic", 5]}) + "\n",
+            # The old protocol: keys must no longer arrive at start.
+            json.dumps({"type": "keys", "keys": {"anthropic": "x"}}) + "\n",
         ]
         for line in bad_lines:
             with self.subTest(line=line):
@@ -372,6 +395,30 @@ class LlmRunTests(LlmRunCase):
         code, _, raw = self.run_llm(line + "\n")
         self.assertEqual(code, control.LLM_EXIT_PROTOCOL_ERROR)
         self.assertNotIn(FAKE_KEY, raw)
+        bad_key = json.dumps({"key": {"value": FAKE_KEY}}) + "\n"
+        code, events, raw = self.run_llm(
+            self.providers_line("anthropic") + self.answer("claude-haiku-5-5") + bad_key
+        )
+        self.assertEqual(code, control.LLM_EXIT_PROTOCOL_ERROR)
+        self.assertEqual(events[-1]["event"], "protocol_error")
+        self.assertNotIn(FAKE_KEY, raw)
+
+    def test_T50_a_key_that_cannot_be_read_ends_as_an_auth_error(self) -> None:
+        # null: the app could not read the item (for example, access denied).
+        stdin = (
+            self.providers_line("anthropic")
+            + self.answer("claude-haiku-5-5")
+            + self.key_answer(None)
+        )
+        code, events, _ = self.run_llm(stdin)
+        self.assertEqual(code, control.LLM_RUN_EXIT_CODES[OutcomeKind.END_ERROR])
+        self.assertEqual(events[-1]["reason"], "AuthError")
+        self.assertIn("check it in Settings", events[-1]["message"])
+        self.assertNotIn("ask_retry", [e["event"] for e in events])
+
+    def test_providers_outside_the_model_table_are_ignored(self) -> None:
+        code, events, _ = self.run_llm(self.providers_line("someone-else"))
+        self.assertEqual(events[-1]["reason"], "no_keys")
 
     def test_invalid_answers_are_protocol_errors(self) -> None:
         answers = [
@@ -386,7 +433,7 @@ class LlmRunTests(LlmRunCase):
         for answer in answers:
             with self.subTest(answer=answer):
                 code, events, _ = self.run_llm(
-                    self.keys_line(anthropic=FAKE_KEY) + answer
+                    self.providers_line("anthropic") + answer
                 )
                 self.assertEqual(code, control.LLM_EXIT_PROTOCOL_ERROR)
                 self.assertEqual(events[-1]["event"], "protocol_error")
@@ -394,14 +441,15 @@ class LlmRunTests(LlmRunCase):
 
     def test_a_missing_transcript_is_an_internal_error(self) -> None:
         (self.session / "transcripts" / "transcript.speakers.txt").unlink()
-        code, events, _ = self.run_llm(self.keys_line(anthropic=FAKE_KEY))
+        code, events, _ = self.run_llm(self.providers_line("anthropic"))
         self.assertEqual(code, control.LLM_EXIT_INTERNAL_ERROR)
         self.assertEqual(events[-1], {"event": "error", "error": "FileNotFoundError"})
 
-    def test_retry_is_asked_once_and_answered_on_stdin(self) -> None:
+    def test_T50_retry_is_asked_once_and_reuses_the_key(self) -> None:
         stdin = (
-            self.keys_line(anthropic=FAKE_KEY)
+            self.providers_line("anthropic")
             + self.answer("claude-haiku-5-5")
+            + self.key_answer()
             + json.dumps({"retry": True})
             + "\n"
         )
@@ -409,9 +457,10 @@ class LlmRunTests(LlmRunCase):
             stdin, scripts={"anthropic": [ProviderError(), ok()]}
         )
         self.assertEqual(code, 0)
+        # Retry reuses the key: it is asked for once.
         self.assertEqual(
             [e["event"] for e in events],
-            ["ask_choice", "progress", "ask_retry", "progress", "outcome"],
+            ["ask_choice", "progress", "need_key", "ask_retry", "progress", "outcome"],
         )
 
 
@@ -431,8 +480,8 @@ class ExitCodeTests(LlmRunCase):
         self.assertEqual((special | set(table.values())) & {1, 2}, set())
 
     def test_T37_real_runs_end_with_their_own_code(self) -> None:
-        keys = self.keys_line(anthropic=FAKE_KEY)
-        choose = keys + self.answer("claude-haiku-5-5")
+        keys = self.providers_line("anthropic")
+        choose = keys + self.answer("claude-haiku-5-5") + self.key_answer()
         results = {}
 
         results["DONE"] = self.run_llm(choose)[0]
@@ -460,18 +509,22 @@ class ExitCodeTests(LlmRunCase):
 
 class KeyNeverLeaksTests(LlmRunCase):
     def test_T35_the_fake_key_appears_nowhere(self) -> None:
-        keys = self.keys_line(anthropic=FAKE_KEY, openai=FAKE_KEY, oci=FAKE_KEY)
+        keys = self.providers_line("anthropic", "openai", "oci")
+        key = self.key_answer()
         runs = [
-            (keys + self.answer("claude-haiku-5-5"), None),
-            (keys + self.answer("claude-haiku-5-5"), {"anthropic": [RuntimeError(FAKE_KEY)]}),
-            (keys + self.answer("gpt-6-luna") , {"openai": [AuthError()]}),
+            (keys + self.answer("claude-haiku-5-5") + key, None),
+            (
+                keys + self.answer("claude-haiku-5-5") + key,
+                {"anthropic": [RuntimeError(FAKE_KEY)]},
+            ),
+            (keys + self.answer("gpt-6-luna") + key, {"openai": [AuthError()]}),
             (keys + self.answer(None, None), None),
             (keys + "garbage " + FAKE_KEY + "\n", None),
+            (keys + self.answer("claude-haiku-5-5") + "garbage " + FAKE_KEY + "\n", None),
         ]
         seen = []
         for stdin, scripts in runs:
             seen.append(self.run_llm(stdin, scripts)[2])
-        seen.append(self.run_llm(keys.replace("keys", "kez", 1))[2])
         on_disk = "\n".join(
             path.read_text(encoding="utf-8", errors="replace")
             for path in sorted(self.root.rglob("*"))
@@ -492,7 +545,7 @@ class KeyNeverLeaksTests(LlmRunCase):
 
         with mock.patch.object(control, "run_llm_command", noisy):
             code, out, err = self.run_main(
-                "llm-run", str(self.session), stdin=self.keys_line()
+                "llm-run", str(self.session), stdin=self.providers_line()
             )
         self.assertEqual(code, control.LLM_RUN_EXIT_CODES[OutcomeKind.END_NO_LLM])
         events = self.lines(out)

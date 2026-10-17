@@ -68,15 +68,11 @@ enum LLMKeychain {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 
-    /// The keys of the providers that have one, for the first line of `llm-run`.
-    static func storedKeys() -> [String: String] {
-        var keys: [String: String] = [:]
-        for provider in providers {
-            if let key = key(provider), !key.isEmpty {
-                keys[provider] = key
-            }
-        }
-        return keys
+    /// The providers that have a key, for the first line of `llm-run`. Reads
+    /// attributes only, so macOS never asks for the password here: a key is
+    /// read when `llm-run` asks for it, after the choice of the model.
+    static func providersWithKey() -> [String] {
+        providers.filter { hasKey($0) }
     }
 }
 
@@ -208,6 +204,7 @@ private struct LLMEvent: Decodable {
     let kind: String?
     let resultPath: String?
     let emergencyPath: String?
+    let provider: String?
 }
 
 /// Splits what a pipe delivers into lines. Blocks in `next()`.
@@ -280,7 +277,7 @@ final class LLMFlowDriver {
         return box.value
     }
 
-    func run(session: URL, keys: [String: String]) -> LLMRunResult {
+    func run(session: URL, providers: [String]) -> LLMRunResult {
         let process = control.makeProcess(["llm-run", session.path])
         let input = Pipe()
         let output = Pipe()
@@ -310,8 +307,8 @@ final class LLMFlowDriver {
             try? writer.close()
         }
 
-        // First line: the keys, only the providers that have one.
-        send(["type": "keys", "keys": keys])
+        // First line: which providers have a key. No key travels here.
+        send(["type": "providers", "providers": providers])
 
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -341,6 +338,15 @@ final class LLMFlowDriver {
                     self.handlers.askRetry(event.message ?? "", done)
                 } ?? false
                 send(["retry": retry])
+            case "need_key":
+                // Read here, on this background queue: macOS may ask for the
+                // password, and only for the provider about to be called.
+                // null tells llm-run the key could not be read.
+                let key = event.provider
+                    .flatMap { LLMKeychain.providers.contains($0) ? $0 : nil }
+                    .flatMap { LLMKeychain.key($0) }
+                    .flatMap { $0.isEmpty ? nil : $0 }
+                send(["key": key.map { $0 as Any } ?? NSNull()])
             case "progress":
                 if let model = event.model {
                     DispatchQueue.main.async { self.handlers.progress(model) }

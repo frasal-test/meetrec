@@ -37,6 +37,7 @@ from .ui import (
     Choice,
     ChoiceScreen,
     ModelOption,
+    ProtocolError,
     RetryScreen,
     UserInterface,
     format_max_cost,
@@ -423,11 +424,15 @@ def call_provider(
 ) -> LLMResponse | LLMError:
     """Stato: CALL_PROVIDER. One call through the adapter; records the attempt
     and its cost (I11). Any exception that is not an LLMError is wrapped, so
-    the flow never crashes on an adapter."""
+    the flow never crashes on an adapter. A ProtocolError (the app answered
+    the key request with something invalid) is not the provider's doing and
+    goes up to llm-run, like every other invalid answer."""
     try:
         response = adapter.complete(request)
     except LLMError as exc:
         error: LLMError = exc
+    except ProtocolError:
+        raise
     except Exception:
         # Only the class is kept: the original message could hold anything.
         error = UnknownLLMError()

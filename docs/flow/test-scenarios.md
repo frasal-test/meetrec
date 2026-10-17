@@ -74,3 +74,4 @@ Tutti i test usano adapter fake e storage controllabile. Nessuna rete, nessuna k
 | T47 | `is_configured` | legge solo il Portachiavi (fake nei test); nessun import SDK, nessuna rete |
 | T48 | Transcript oltre `MAX_INPUT_TOKENS` con modelli da 1M di contesto | END_NO_LLM `too_long`; nessuna chiamata |
 | T49 | Modello con `long_context_threshold` < `MAX_INPUT_TOKENS` | controllo all'avvio fallisce |
+| T50 | Key chiesta all'app (`need_key`) | solo per il provider chiamato, dopo la scelta, una volta sola anche con Retry; mai con "None"; risposta `null` → END_ERROR `AuthError`; risposta malformata → errore di protocollo |

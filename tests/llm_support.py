@@ -13,6 +13,7 @@ from typing import Any, Callable
 from meeting_recorder.config import SummaryConfig
 from meeting_recorder.llm.adapters import AdapterRegistry
 from meeting_recorder.llm.flow import run_llm_flow
+from meeting_recorder.llm.errors import AuthError
 from meeting_recorder.llm.keys import InMemoryKeyStore
 from meeting_recorder.llm.models import MODEL_TABLE, ModelSpec, compute_cost
 from meeting_recorder.llm.outcomes import Outcome
@@ -89,6 +90,9 @@ class FakeAdapter:
 
     def complete(self, req: LLMRequest) -> LLMResponse:
         self.requests.append(req)
+        # Like the real adapters: the key is read at call time, never before.
+        if not self.keystore.get_key(self.provider):
+            raise AuthError()
         item = self.script.pop(0) if self.script else ok()
         if isinstance(item, BaseException):
             raise item

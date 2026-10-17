@@ -99,7 +99,7 @@ Ogni funzione che implementa una parte del flusso indica nel docstring lo stato 
 2. **`meeting_recorder/session_transcription.py`**: TRANSCRIPT_READY e SAVE_TRANSCRIPT. Scritture atomiche, e metadato `language` (`it/en/es/auto`) salvato con il transcript. Il job conserva i suoi tentativi; END_FATAL viene comunicato dopo l'ultimo (T45).
 3. **`meeting_recorder/config.py`**: `SummaryConfig(automatic=False, default_model=None, oci_region=None)`. Default spento, nessun modello di default. Aggiornare `config.example.json`.
 4. **`meeting_recorder/control.py`**
-   - `llm-run <sessione>`: esegue il flusso da CHECK_LENGTH. Protocollo con lo Swift: eventi JSON su stdout (`ask_choice`, `ask_retry`, `progress`, `outcome`) e risposte JSON su stdin.
+   - `llm-run <sessione>`: esegue il flusso da CHECK_LENGTH. Protocollo con lo Swift: eventi JSON su stdout (`ask_choice`, `ask_retry`, `need_key`, `progress`, `outcome`) e risposte JSON su stdin.
    - `startup-check`: il controllo all'avvio offline. `doctor` lo include e aggiunge i controlli di rete.
    - Sottocomandi per Settings: verifica di una key (letta da stdin, mai da argv), `auto-summary on --model <id>` / `off`, stato in JSON (mai le key).
    - Installazione di `requirements-summary.txt` nel `.venv` quando si salva la prima key.
@@ -117,7 +117,7 @@ Ogni funzione che implementa una parte del flusso indica nel docstring lo stato 
 La finestra Settings è in Swift, quindi il Portachiavi lo gestisce l'app con il framework Security: salvataggio, lettura e cancellazione, una voce per provider.
 - La key non passa mai in argv né in una variabile d'ambiente: argv è visibile in `ps`, l'ambiente si eredita.
 - Verifica: Swift passa la key su stdin al sottocomando di verifica; se la verifica riesce, Swift la salva nel Portachiavi.
-- `llm-run`: all'avvio Swift passa su stdin, in un unico messaggio iniziale, le key presenti. Il Python le tiene solo in memoria e `is_configured` controlla quel messaggio.
+- `llm-run`: all'avvio Swift passa su stdin solo l'elenco dei provider con una key (`{"type": "providers", ...}`), che `is_configured` consulta. La key di un provider viene chiesta con l'evento `need_key` quando l'adapter la legge per la chiamata, cioè dopo la scelta del modello; Swift la legge dal Portachiavi in quel momento e risponde `{"key": ...}` o `null`. Così macOS chiede la password (dopo una nuova build) una volta sola, per il provider scelto, e mai con "None".
 - Leggere il Portachiavi direttamente dal Python (`security find-generic-password`) farebbe comparire una richiesta di accesso di macOS per voci create da MeetRec.app. Per questo lo evitiamo.
 
 ## Prompt di riassunto

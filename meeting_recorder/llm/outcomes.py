@@ -123,7 +123,7 @@ def error(
     service = provider_name(provider)
     messages = {
         "InsufficientCreditsError": f"No credit left on {service}. Transcript saved",
-        "AuthError": f"{service} API key no longer valid. Transcript saved",
+        "AuthError": f"Could not use the {service} API key: check it in Settings. Transcript saved",
         "ModelNotFoundError": (
             f"Model no longer available from {service}: update the app. "
             "Transcript saved"

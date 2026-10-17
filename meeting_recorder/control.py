@@ -28,7 +28,7 @@ from .llm import checks as llm_checks
 from .llm.adapters import AdapterRegistry, default_registry
 from .llm.errors import AuthError, LLMError, UnknownLLMError
 from .llm.flow import run_llm_flow
-from .llm.keys import InMemoryKeyStore
+from .llm.keys import InMemoryKeyStore, OnDemandKeyStore
 from .llm.models import MODEL_TABLE, find_model
 from .llm.outcomes import OutcomeKind
 from .llm.storage import default_emergency_dir
@@ -471,33 +471,29 @@ def _emit(stream: IO[str], payload: dict[str, Any]) -> None:
     stream.flush()
 
 
-def read_keys_message(stdin: IO[str]) -> InMemoryKeyStore:
+def read_providers_message(stdin: IO[str]) -> frozenset[str]:
     """Stato: CHECK_LENGTH (ingresso del processo LLM). The first stdin line
-    of `llm-run`: {"type": "keys", "keys": {"<provider>": "<key>", ...}}.
-
-    The keys stay in memory (I4); nothing here, including the error messages,
-    ever repeats a value read from the line. Raises ProtocolError.
+    of `llm-run`: {"type": "providers", "providers": ["<provider>", ...]},
+    the providers that have a key in the Keychain. No key travels here: each
+    one is asked for only when an adapter needs it (JsonLinesUI.request_key).
+    Raises ProtocolError.
     """
     line = stdin.readline()
     if not line.strip():
-        raise ProtocolError("the keys message is missing")
+        raise ProtocolError("the providers message is missing")
     try:
         message = json.loads(line)
     except ValueError:
-        raise ProtocolError("the keys message is not valid JSON") from None
-    if not isinstance(message, dict) or message.get("type") != "keys":
-        raise ProtocolError("the first message must be of type keys")
-    keys = message.get("keys")
-    if not isinstance(keys, dict):
-        raise ProtocolError("the keys message has no keys object")
-    store = InMemoryKeyStore()
-    for provider, key in keys.items():
-        if not isinstance(key, str):
-            raise ProtocolError("every key must be a string")
-        # A provider that is not in the model table has nothing to use it.
-        if key.strip() and provider in KEY_PROVIDERS:
-            store[provider] = key.strip()
-    return store
+        raise ProtocolError("the providers message is not valid JSON") from None
+    if not isinstance(message, dict) or message.get("type") != "providers":
+        raise ProtocolError("the first message must be of type providers")
+    providers = message.get("providers")
+    if not isinstance(providers, list) or not all(
+        isinstance(provider, str) for provider in providers
+    ):
+        raise ProtocolError("the providers message has no list of names")
+    # A provider that is not in the model table has nothing to use a key.
+    return frozenset(p for p in providers if p in KEY_PROVIDERS)
 
 
 def run_llm_command(
@@ -511,9 +507,10 @@ def run_llm_command(
 ) -> int:
     """Stato: CHECK_LENGTH in poi (processo LLM, separato dal worker).
 
-    Protocol, one JSON object per line. stdin: the keys message, then one
-    answer per ask_choice / ask_retry. stdout: `ask_choice`, `ask_retry`,
-    `progress` and `outcome` events (JsonLinesUI, key "event"), or one of
+    Protocol, one JSON object per line. stdin: the providers message, then
+    one answer per ask_choice / ask_retry / need_key. stdout: `ask_choice`,
+    `ask_retry`, `need_key`, `progress` and `outcome` events (JsonLinesUI,
+    key "event"), or one of
     {"event": "startup_check_failed", "problems": [...]},
     {"event": "protocol_error", "message": ...},
     {"event": "error", "error": <class name>} when the flow could not run.
@@ -522,7 +519,7 @@ def run_llm_command(
     injectable for the tests.
     """
     try:
-        keystore = read_keys_message(stdin)
+        providers = read_providers_message(stdin)
     except ProtocolError as exc:
         _emit(stdout, {"event": "protocol_error", "message": str(exc)})
         return LLM_EXIT_PROTOCOL_ERROR
@@ -542,12 +539,13 @@ def run_llm_command(
             return LLM_EXIT_STARTUP_CHECK_FAILED
         session_dir = args.session.expanduser().resolve()
         transcript = load_saved_transcript(session_dir)
+        ui = JsonLinesUI(stdin, stdout)
         outcome = run_llm_flow(
             transcript,
             summary_config=config.summary,
             registry=registry,
-            keystore=keystore,
-            ui=JsonLinesUI(stdin, stdout),
+            keystore=OnDemandKeyStore(providers, ui.request_key),
+            ui=ui,
             session_dir=session_dir,
             emergency_dir=emergency_dir or default_emergency_dir(),
             templates_dir=templates_dir,

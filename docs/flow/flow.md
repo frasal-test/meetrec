@@ -130,6 +130,7 @@ flowchart TD
 - Se SAVE_TRANSCRIPT fallisce, quel tentativo termina in END_FATAL. Il livello job, fuori da questo flusso, può rifare la trascrizione fino a `max_attempts`; ogni nuovo tentativo riparte da TRANSCRIPT_READY. L'utente riceve il messaggio END_FATAL solo dopo l'ultimo tentativo.
 - Dopo SAVE_TRANSCRIPT ok, l'app avvia un processo LLM separato, fuori dalla coda di trascrizione, che esegue il flusso da CHECK_LENGTH in poi su un transcript già salvato.
 - ASK_CHOICE e ASK_RETRY sono mostrate dall'app: il processo LLM emette un evento JSON su stdout e attende la risposta su stdin.
+- Le API key: all'avvio l'app comunica solo **quali** provider hanno una key (letta dagli attributi del Portachiavi, senza segreto: macOS non chiede la password). La key di un provider viene chiesta all'app (`need_key`) solo quando il suo adapter la legge per la chiamata, in CALL_PROVIDER, quindi dopo la scelta del modello; il processo LLM la tiene in memoria, e un Retry non la richiede. Con "None", o se il flusso finisce prima di CALL_PROVIDER, nessuna key viene letta. Se l'app non riesce a leggerla (per esempio accesso negato nel Portachiavi) risponde `null` e la chiamata termina con `AuthError`.
 
 ## Posizione dei file
 - Transcript: `<sessione>/transcripts/` (file esistenti; il testo usato dal flusso è `transcript.speakers.txt`, senza le righe di avviso `[MeetRec]`).
