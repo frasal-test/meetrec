@@ -53,7 +53,7 @@ Nessun default.
 | DONE `truncated` | Come sopra + "La risposta è stata troncata per limite di lunghezza" |
 | END_NO_LLM `too_short` | Transcript troppo breve per un riassunto, salvato in <percorso> |
 | END_NO_LLM `no_keys` | Transcript salvato. Nessun LLM configurato |
-| END_NO_LLM `too_long` | Transcript troppo lungo per <modello / i modelli configurati>. Transcript salvato |
+| END_NO_LLM `too_long` | Transcript troppo lungo per un riassunto (oltre ~5 ore) o per <modello>. Transcript salvato |
 | END_NO_LLM `declined` | nessun messaggio, oppure solo conferma del salvataggio |
 | END_ERROR `InsufficientCreditsError` | Credito esaurito su <provider>. Transcript salvato |
 | END_ERROR `AuthError` | API key di <provider> non più valida. Transcript salvato |

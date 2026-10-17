@@ -102,7 +102,8 @@ flowchart TD
 | Retry automatici SDK | 0 (`max_retries=0`) |
 | Timeout HTTP | connessione 10 s, lettura 180 s (costanti configurabili) |
 | Lingue di risposta | Ita, Eng, Esp, Auto |
-| Contesto sufficiente | token stimati del prompt (vedi `adapter-contract.md`) + `max_output_tokens` ≤ `context_window` |
+| Limite di input | `MAX_INPUT_TOKENS` = 100.000 token stimati (≈ 5–6 ore di parlato), uguale per tutti i modelli; sotto la soglia dei prezzi long context |
+| Contesto sufficiente | token stimati del prompt ≤ `MAX_INPUT_TOKENS` e token stimati del prompt + `max_output_tokens` ≤ `context_window` (vedi `adapter-contract.md`) |
 
 ## Invarianti
 
@@ -122,7 +123,7 @@ flowchart TD
 - **I14** — Il risultato salvato contiene almeno: `run_id`, id transcript, provider, modello, modalità (manuale/automatica), template usato e sua lingua, lingua di risposta, testo, stato (`complete`/`truncated`), tentativi con token input/output e costo, costo totale, valuta, timestamp.
 - **I15** — Ogni transizione produce una riga di log strutturata con `run_id`, stato di partenza, stato di arrivo, motivo. Nessuna API key in log, errori o risultati.
 - **I16** — Gli esiti DONE, END_NO_LLM, END_ERROR, END_SAVE_ERROR, END_FATAL sono distinguibili dal chiamante.
-- **I17** — Un transcript non viene mai inviato a un modello nel cui contesto non entra, e non viene mai troncato per farcelo entrare.
+- **I17** — Un transcript non viene mai inviato a un modello se supera `MAX_INPUT_TOKENS` o se non entra nel contesto del modello, e non viene mai troncato per farcelo entrare. Il limite unico tiene ogni richiesta sotto la fascia di prezzo long context, così la tabella modelli ha un solo prezzo per modello e il costo calcolato è corretto.
 
 ## Confine tra processi
 - Il worker di trascrizione esegue TRANSCRIPT_READY e SAVE_TRANSCRIPT, poi termina.

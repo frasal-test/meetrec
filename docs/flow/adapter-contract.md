@@ -16,14 +16,15 @@ Modelli e prezzi sono costanti nel codice, in un'unica tabella. Per ogni voce:
 | `currency` | valuta dei prezzi: `USD` per tutti i modelli |
 | `max_output_tokens` | sempre valorizzato (alcuni provider lo richiedono obbligatoriamente) |
 | `context_window` | token totali (prompt + risposta) accettati dal modello; serve per I17 |
+| `long_context_threshold` | token di input oltre i quali il provider applica un prezzo maggiorato; `None` se non esiste |
 
 Un solo modello per servizio:
 
-| `provider` | `model_id` | `price_input` / `price_output` (USD per 1M token) | `context_window` |
-|---|---|---|---|
-| `anthropic` | `claude-haiku-5-5` | 0,10 / 0,50 | 1M |
-| `openai` | `gpt-6-luna` | 0,10 / 0,50 | ~1M (da verificare) |
-| `oci` | `openai.gpt-oss-120b` | 0,15 / 0,60 | 128K |
+| `provider` | `model_id` | `price_input` / `price_output` (USD per 1M token) | `context_window` | `long_context_threshold` |
+|---|---|---|---|---|
+| `anthropic` | `claude-haiku-5-5` | 0,10 / 0,50 | 1M | 100K |
+| `openai` | `gpt-6-luna` | 0,10 / 0,50 | ~1M (da verificare) | da verificare |
+| `oci` | `openai.gpt-oss-120b` | 0,15 / 0,60 | 128K | nessuna |
 
 ## Richiesta neutra
 
@@ -118,8 +119,10 @@ Il riassunto si assume non più lungo del transcript, quindi la stima è un limi
 
 **Contesto sufficiente** (I17), con la stessa `X`:
 ```
+X ≤ MAX_INPUT_TOKENS            (100.000, costante unica dell'app)
 X + max_output_tokens ≤ context_window
 ```
+`MAX_INPUT_TOKENS` deve restare sotto la soglia oltre la quale un provider applica prezzi long context: la tabella ha un solo prezzo per modello. Il controllo all'avvio verifica che per ogni modello `MAX_INPUT_TOKENS` sia ≤ della soglia long context dichiarata in tabella (`long_context_threshold`, assente se il provider non ne ha una).
 
 ## Vincoli
 - Nessuna API key in log, errori, risultati o messaggi all'utente.

@@ -72,3 +72,5 @@ Tutti i test usano adapter fake e storage controllabile. Nessuna rete, nessuna k
 | T45 | SAVE_TRANSCRIPT fallisce a ogni tentativo del job | END_FATAL comunicato solo dopo l'ultimo tentativo; nessuna chiamata LLM |
 | T46 | Settings: attivazione di Automatic Summary | nessun modello preselezionato; senza scelta resta spento |
 | T47 | `is_configured` | legge solo il Portachiavi (fake nei test); nessun import SDK, nessuna rete |
+| T48 | Transcript oltre `MAX_INPUT_TOKENS` con modelli da 1M di contesto | END_NO_LLM `too_long`; nessuna chiamata |
+| T49 | Modello con `long_context_threshold` < `MAX_INPUT_TOKENS` | controllo all'avvio fallisce |
