@@ -3,7 +3,7 @@
 Record and transcribe your Mac meetings locally: your voice and the other participants on separate tracks, with remote speakers told apart.
 
 [![CI](https://github.com/frasal-test/meetrec/actions/workflows/ci.yml/badge.svg)](https://github.com/frasal-test/meetrec/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 ![Platform: macOS 13+](https://img.shields.io/badge/platform-macOS%2013%2B-lightgrey.svg)
 ![Swift](https://img.shields.io/badge/Swift-F05138.svg?logo=swift&logoColor=white)
 ![Python 3.10 to 3.13](https://img.shields.io/badge/python-3.10%20to%203.13-3776AB.svg?logo=python&logoColor=white)
@@ -410,4 +410,8 @@ The two-track recording, recoverable sessions, background queue, menu bar workfl
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Copyright (C) 2026 frasal-test
+
+MeetRec is free software, released under the [GNU General Public License v3.0](LICENSE). You can use, study, change and share it. If you distribute it, modified or not, you must make the source available under the same license.
+
+Versions up to and including v0.9.1 were released under the MIT License, and copies of those versions keep it. Everything after v0.9.1 is GPL-3.0.
