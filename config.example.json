@@ -14,5 +14,10 @@
     "condition_on_previous_text": true,
     "normalize_audio": true,
     "target_speech_dbfs": -20.0
+  },
+  "summary": {
+    "automatic": false,
+    "default_model": null,
+    "oci_region": null
   }
 }

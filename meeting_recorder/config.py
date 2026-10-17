@@ -43,6 +43,18 @@ class TranscriptionConfig:
 
 
 @dataclass
+class SummaryConfig:
+    """Optional LLM summary. Never holds API keys: those live in the macOS
+    Keychain."""
+
+    # Off at install: the cloud is an explicit choice.
+    automatic: bool = False
+    # Model id chosen by the user in Settings; no default and no preselection.
+    default_model: str | None = None
+    oci_region: str | None = None
+
+
+@dataclass
 class AppConfig:
     recordings_dir: Path
     on_stop: str | None = None
@@ -51,6 +63,7 @@ class AppConfig:
     # unless the transcript came out clean (see audio_deletion_blocker).
     delete_audio_after_transcription: bool = False
     transcription: TranscriptionConfig = field(default_factory=TranscriptionConfig)
+    summary: SummaryConfig = field(default_factory=SummaryConfig)
 
 
 def default_recordings_dir() -> Path:
@@ -96,6 +109,23 @@ def _merge_transcription(raw: dict[str, Any]) -> TranscriptionConfig:
     )
 
 
+def _optional_str(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    return str(value)
+
+
+def _merge_summary(raw: dict[str, Any]) -> SummaryConfig:
+    defaults = SummaryConfig()
+    return SummaryConfig(
+        automatic=bool(raw.get("automatic", defaults.automatic)),
+        default_model=_optional_str(
+            raw.get("default_model", defaults.default_model)
+        ),
+        oci_region=_optional_str(raw.get("oci_region", defaults.oci_region)),
+    )
+
+
 def _optional_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -120,6 +150,9 @@ def load_config(path: Path | None = None) -> AppConfig:
     transcription_raw = raw.get("transcription", {})
     if not isinstance(transcription_raw, dict):
         raise ValueError("transcription config must be an object")
+    summary_raw = raw.get("summary", {})
+    if not isinstance(summary_raw, dict):
+        raise ValueError("summary config must be an object")
     on_stop = raw.get("on_stop")
     return AppConfig(
         recordings_dir=recordings,
@@ -128,6 +161,7 @@ def load_config(path: Path | None = None) -> AppConfig:
             raw.get("delete_audio_after_transcription", False)
         ),
         transcription=_merge_transcription(transcription_raw),
+        summary=_merge_summary(summary_raw),
     )
 
 
