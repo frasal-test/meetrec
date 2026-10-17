@@ -49,7 +49,7 @@ class TemplateTests(unittest.TestCase):
             with self.subTest(language=language):
                 request = build(language)
                 self.assertEqual(request.template_language, language)
-                self.assertEqual(request.template_id, f"summary-{language}-v1")
+                self.assertEqual(request.template_id, f"summary-{language}-v2")
                 self.assertTrue(
                     request.system_prompt.startswith(load_template(language))
                 )
@@ -57,7 +57,7 @@ class TemplateTests(unittest.TestCase):
     def test_T14_auto_uses_the_english_template(self):
         request = build("auto")
         self.assertEqual(request.template_language, "en")
-        self.assertEqual(request.template_id, "summary-en-v1")
+        self.assertEqual(request.template_id, "summary-en-v2")
 
     def test_T15_missing_metadata_uses_english_and_is_logged(self):
         lines: list[str] = []
@@ -82,6 +82,23 @@ class TemplateTests(unittest.TestCase):
                 request = build("en", response_language=code)
                 self.assertTrue(request.system_prompt.endswith(sentence))
                 self.assertEqual(request.response_language, code)
+
+    def test_section_headings_follow_the_response_language(self):
+        # Italian transcript, English answer: the Italian template's headings
+        # are restated in English, so the summary is not half Italian.
+        request = build("it", response_language="en")
+        self.assertIn(
+            "Use these section headings, in this order: ## Summary, "
+            "## Decisions, ## Action items, ## Open points.",
+            request.system_prompt,
+        )
+        request = build("en", response_language="es")
+        self.assertIn("## Síntesis, ## Decisiones", request.system_prompt)
+        request = build("it", response_language="auto")
+        self.assertIn(
+            "Write the section headings in the same language as the transcript.",
+            request.system_prompt,
+        )
 
     def test_T17_auto_response_follows_the_transcript_language(self):
         request = build("it", response_language="auto")

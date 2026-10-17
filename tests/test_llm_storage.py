@@ -76,6 +76,8 @@ class MarkdownTests(unittest.TestCase):
             "text": "## Sintesi\nTesto.",
             "attempts": [{"cost": "0.00305"}],
             "total_cost": "0.00305",
+            "template_language": "it",
+            "response_language": "it",
         }
         record.update(changes)
         return record
@@ -90,6 +92,23 @@ class MarkdownTests(unittest.TestCase):
             "Claude Haiku 5.5",
         )
         self.assertIn("- Costo: costo non disponibile (2 tentativi)", markdown)
+
+    def test_the_header_follows_the_response_language(self):
+        markdown = storage.render_markdown(
+            self.record(response_language="en"), "Claude Haiku 5.5"
+        )
+        self.assertTrue(markdown.startswith("# Meeting summary\n"))
+        self.assertIn("- Session: 2026-10-17_10-00-00", markdown)
+        self.assertIn("- Cost: $0.0031 (1 attempt)", markdown)
+        self.assertNotIn("Riassunto", markdown)
+
+    def test_under_auto_the_header_follows_the_transcript(self):
+        markdown = storage.render_markdown(
+            self.record(response_language="auto", template_language="es"),
+            "Claude Haiku 5.5",
+        )
+        self.assertTrue(markdown.startswith("# Resumen de la reunión\n"))
+        self.assertIn("- Coste: $0.0031 (1 intento)", markdown)
 
 
 class EmergencyTests(unittest.TestCase):

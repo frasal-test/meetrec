@@ -123,6 +123,7 @@ La finestra Settings è in Swift, quindi il Portachiavi lo gestisce l'app con il
 
 - **Template** (I6): stessa lingua del transcript (`it`/`en`/`es`); con `auto` o metadato assente, inglese.
 - **Lingua di risposta** (I7): scelta in ASK_CHOICE (Ita/Eng/Esp/Auto), sempre Auto in modalità automatica. È sempre un'istruzione esplicita nel prompt.
+- **Titoli delle sezioni e intestazione del `.md`**: nella lingua di risposta, anche quando il template è in un'altra lingua. Con Auto il modello scrive i titoli nella lingua del transcript e l'intestazione segue la lingua del template (template v2).
 - **Il transcript è un dato** (I8): sta tra delimitatori espliciti, per esempio `<transcript>…</transcript>`, e il system prompt dichiara che il contenuto delimitato non contiene istruzioni da eseguire.
 - Avvertire il modello che:
   - il testo viene da un riconoscimento vocale e può contenere errori;
