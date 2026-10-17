@@ -1179,6 +1179,36 @@ final class MenuController: NSObject, @unchecked Sendable {
         }
     }
 
+    /// Like runControl, but also returns the output; the log still gets
+    /// all of it.
+    private func runControlCapturingOutput(_ arguments: [String]) -> (Int32, String) {
+        let logURL = recordingsURL.appendingPathComponent(".menubar.log")
+        if !FileManager.default.fileExists(atPath: logURL.path) {
+            FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        }
+        let log = FileHandle(forWritingAtPath: logURL.path)
+        _ = try? log?.seekToEnd()
+        defer { log?.closeFile() }
+        let pipe = Pipe()
+        let process = Process()
+        process.executableURL = pythonURL
+        process.arguments = ["-m", "meeting_recorder.control"] + arguments
+        process.currentDirectoryURL = projectURL
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do {
+            try process.run()
+        } catch {
+            try? log?.write(contentsOf: Data("\(error)\n".utf8))
+            return (1, "")
+        }
+        // Read before waiting: a full pipe would block the child forever.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        try? log?.write(contentsOf: data)
+        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
     private func runControl(_ arguments: [String]) -> Int32 {
         let logURL = recordingsURL.appendingPathComponent(".menubar.log")
         if !FileManager.default.fileExists(atPath: logURL.path) {
@@ -1240,15 +1270,68 @@ final class MenuController: NSObject, @unchecked Sendable {
 
     @objc private func runDoctor() {
         DispatchQueue.global(qos: .utility).async { [self] in
-            let status = runControl(["doctor"])
+            let (status, output) = runControlCapturingOutput(["doctor"])
+            // Only the check lines: the permissions note that follows them
+            // describes this process, not MeetRec.app, and stays in the log.
+            let checks = output
+                .split(separator: "\n")
+                .filter { $0.hasPrefix("✓") || $0.hasPrefix("✗") }
+                .joined(separator: "\n")
             DispatchQueue.main.async {
-                self.showAlert(
-                    title: status == 0
-                        ? "MeetRec doctor"
-                        : "MeetRec needs attention",
-                    message: "See \(self.recordingsURL.path)/.menubar.log"
-                )
+                self.showDoctorResult(passed: status == 0, checks: checks)
             }
+        }
+    }
+
+    private func showDoctorResult(passed: Bool, checks: String) {
+        let logURL = recordingsURL.appendingPathComponent(".menubar.log")
+        let alert = NSAlert()
+        alert.messageText = passed ? "All checks passed" : "MeetRec needs attention"
+        alert.informativeText = checks.isEmpty
+            ? "Doctor did not report any checks. See the full log."
+            : "Full output in \(logURL.path)"
+        if !checks.isEmpty {
+            let width: CGFloat = 520
+            let height: CGFloat = 260
+            let scroll = NSScrollView(
+                frame: NSRect(x: 0, y: 0, width: width, height: height)
+            )
+            scroll.hasVerticalScroller = true
+            scroll.borderType = .bezelBorder
+            let text = NSTextView(
+                frame: NSRect(x: 0, y: 0, width: width, height: height)
+            )
+            text.isEditable = false
+            text.isSelectable = true
+            text.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+            text.textContainerInset = NSSize(width: 6, height: 6)
+            text.isVerticallyResizable = true
+            text.autoresizingMask = [.width]
+            text.textContainer?.widthTracksTextView = true
+            text.string = checks
+            if let storage = text.textStorage {
+                // Failures in red so they stand out in a long list.
+                var offset = 0
+                for line in checks.components(separatedBy: "\n") {
+                    let length = (line as NSString).length
+                    if line.hasPrefix("✗") {
+                        storage.addAttribute(
+                            .foregroundColor,
+                            value: NSColor.systemRed,
+                            range: NSRange(location: offset, length: length)
+                        )
+                    }
+                    offset += length + 1
+                }
+            }
+            scroll.documentView = text
+            alert.accessoryView = scroll
+        }
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Open log")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSWorkspace.shared.open(logURL)
         }
     }
 
