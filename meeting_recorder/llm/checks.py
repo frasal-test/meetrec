@@ -97,7 +97,7 @@ def _remove_orphan_temp_files(
             result.removed_temp_files.append(path)
 
 
-def _rotate_logs(directory: Path, result: HousekeepingResult) -> None:
+def rotate_logs(directory: Path, result: HousekeepingResult) -> None:
     for name in LOG_NAMES:
         log = directory / name
         try:
@@ -130,5 +130,5 @@ def housekeeping(
         if not directory.is_dir():
             continue
         _remove_orphan_temp_files(directory, moment, result)
-        _rotate_logs(directory, result)
+        rotate_logs(directory, result)
     return result

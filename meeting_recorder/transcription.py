@@ -11,7 +11,9 @@ import time
 import wave
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterable, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Iterable, TypeVar
+
+from .sessions import atomic_write_text
 
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
@@ -115,7 +117,7 @@ def write_txt(path: Path, transcript: Transcript) -> None:
     header = warning_lines(transcript, "[MeetRec] ")
     if header:
         text = "\n".join(header) + "\n\n" + text
-    path.write_text(text + "\n", encoding="utf-8")
+    atomic_write_text(path, text + "\n")
 
 
 def write_srt(path: Path, transcript: Transcript) -> None:
@@ -127,7 +129,7 @@ def write_srt(path: Path, transcript: Transcript) -> None:
         )
         lines.append(segment.text.strip())
         lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines))
 
 
 def write_speaker_txt(path: Path, transcript: Transcript) -> None:
@@ -163,13 +165,21 @@ def write_speaker_txt(path: Path, transcript: Transcript) -> None:
     header = warning_lines(transcript, "[MeetRec] ")
     if header:
         body = "\n".join(header) + "\n\n" + body
-    path.write_text(body + "\n", encoding="utf-8")
+    atomic_write_text(path, body + "\n")
 
 
-def write_json(path: Path, transcript: Transcript) -> None:
-    path.write_text(
-        json.dumps(asdict(transcript), ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+def write_json(
+    path: Path,
+    transcript: Transcript,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """`extra` is merged into the top-level object (e.g. the language the
+    session was recorded with)."""
+    document: dict[str, Any] = asdict(transcript)
+    if extra:
+        document.update(extra)
+    atomic_write_text(
+        path, json.dumps(document, ensure_ascii=False, indent=2) + "\n"
     )
 
 
@@ -213,7 +223,7 @@ def write_markdown(path: Path, transcript: Transcript) -> None:
             current_text.append(segment.text.strip())
         current_end = segment.end
     flush()
-    path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines).rstrip() + "\n")
 
 
 # Whisper groups everything inside one 30-second window into a segment, and the
@@ -314,7 +324,7 @@ def write_rttm(path: Path, uri: str, turns: list[DiarizationTurn]) -> None:
                 ]
             )
         )
-    path.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    atomic_write_text(path, "\n".join(lines).strip() + "\n")
 
 
 

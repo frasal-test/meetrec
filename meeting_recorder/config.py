@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .sessions import atomic_write_text
+
 
 CONFIG_PATH = Path("~/.config/meetrec/config.json").expanduser()
 
@@ -165,20 +167,50 @@ def load_config(path: Path | None = None) -> AppConfig:
     )
 
 
-def set_config_value(path: Path | None, key: str, value: Any) -> None:
-    """Sets one top-level key, keeping everything else in the file."""
-    config_path = (path or CONFIG_PATH).expanduser()
+def _read_raw_config(config_path: Path) -> dict[str, Any]:
     raw: dict[str, Any] = {}
     if config_path.exists():
         loaded = json.loads(config_path.read_text(encoding="utf-8"))
         if not isinstance(loaded, dict):
             raise ValueError(f"Config root must be an object: {config_path}")
         raw = loaded
-    raw[key] = value
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = config_path.with_name(f".{config_path.name}.tmp")
-    temporary.write_text(
-        json.dumps(raw, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    return raw
+
+
+def _write_raw_config(config_path: Path, raw: dict[str, Any]) -> None:
+    atomic_write_text(
+        config_path, json.dumps(raw, ensure_ascii=False, indent=2) + "\n"
     )
-    os.replace(temporary, config_path)
+
+
+def set_config_value(path: Path | None, key: str, value: Any) -> None:
+    """Sets one top-level key, keeping everything else in the file. The write
+    is atomic (temporary file in the same directory, then rename)."""
+    config_path = (path or CONFIG_PATH).expanduser()
+    raw = _read_raw_config(config_path)
+    raw[key] = value
+    _write_raw_config(config_path, raw)
+
+
+SUMMARY_KEYS = frozenset(SummaryConfig.__dataclass_fields__)
+
+
+def set_summary_values(path: Path | None, values: dict[str, Any]) -> None:
+    """Sets keys of the `summary` block in one atomic write, keeping every
+    other key of the block and of the file. Never receives API keys."""
+    unknown = set(values) - SUMMARY_KEYS
+    if unknown:
+        raise ValueError(f"Unknown summary setting: {sorted(unknown)}")
+    config_path = (path or CONFIG_PATH).expanduser()
+    raw = _read_raw_config(config_path)
+    summary = raw.get("summary", {})
+    if not isinstance(summary, dict):
+        raise ValueError("summary config must be an object")
+    summary.update(values)
+    raw["summary"] = summary
+    _write_raw_config(config_path, raw)
+
+
+def set_summary_value(path: Path | None, key: str, value: Any) -> None:
+    """Sets one key of the `summary` block (see set_summary_values)."""
+    set_summary_values(path, {key: value})

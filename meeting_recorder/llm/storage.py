@@ -1,14 +1,14 @@
 """Atomic persistence of results (I2, I13, I14)."""
 from __future__ import annotations
 
-import os
 import secrets
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..sessions import atomic_write_json
+# atomic_write_text lives in sessions (shared with the transcript writers) and
+# is re-exported here so storage.atomic_write_text keeps working.
+from ..sessions import atomic_write_json, atomic_write_text  # noqa: F401
 
 
 SUMMARIES_DIR = "summaries"
@@ -22,28 +22,6 @@ def new_run_id() -> str:
     """Timestamp plus a random suffix: unique per run, sortable."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return f"{stamp}-{secrets.token_hex(4)}"
-
-
-def atomic_write_text(path: Path, text: str) -> None:
-    """Temporary file in the same directory, then rename. Same temp naming as
-    atomic_write_json so housekeeping finds the leftovers."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle = tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=path.parent,
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        delete=False,
-    )
-    temporary = Path(handle.name)
-    try:
-        with handle:
-            handle.write(text)
-        os.replace(temporary, path)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
 
 
 def render_markdown(record: dict[str, Any], model_label: str) -> str:

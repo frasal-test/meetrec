@@ -6,12 +6,17 @@ from pathlib import Path
 from typing import Any
 
 from .config import AppConfig
+from .llm import outcomes
+from .llm.log import file_sink
+from .llm.transcript import LANGUAGE_KEY, LANGUAGE_VALUES
 from .sessions import (
+    JOB_FILE,
     append_log,
     read_json,
     run_on_stop,
     track_paths,
     update_job_progress,
+    utc_now,
 )
 from .transcription import (
     DiarizationTurn,
@@ -29,6 +34,65 @@ from .transcription import (
     write_srt,
     write_txt,
 )
+
+
+TRANSCRIPT_READY = "TRANSCRIPT_READY"
+SAVE_TRANSCRIPT = "SAVE_TRANSCRIPT"
+CHECK_LENGTH = "CHECK_LENGTH"
+END_FATAL = "END_FATAL"
+
+# The only languages the summary prompts exist for; anything else is "auto".
+_SUMMARY_LANGUAGES = tuple(
+    language for language in LANGUAGE_VALUES if language != "auto"
+)
+
+
+class TranscriptSaveError(Exception):
+    """Stato: SAVE_TRANSCRIPT. Transizione: SAVE_TRANSCRIPT -> END_FATAL.
+
+    The transcript could not be saved. The message is the user text of
+    END_FATAL ("Impossibile salvare il transcript (<motivo>)") with the class
+    name of the cause as the reason; nothing else of the cause is kept, and
+    run_job writes it to job.json's `last_error` as "TranscriptSaveError: ...",
+    which is how the app tells END_FATAL from other transcription failures.
+    """
+
+
+def language_setting(language: str | None) -> str:
+    """Stato: TRANSCRIPT_READY (the `language` metadata of the transcript).
+
+    The language the session was recorded with: it, en or es, or "auto" when
+    the setting is None or "auto". Any other configured value (a language code
+    outside it/en/es, which Whisper accepts) is also "auto": the flow has no
+    prompt template for it, and I6 then picks the English one.
+    """
+    value = language.strip().lower() if isinstance(language, str) else None
+    return value if value in _SUMMARY_LANGUAGES else "auto"
+
+
+def log_worker_transition(
+    session_dir: Path,
+    from_state: str,
+    to_state: str,
+    reason: str,
+    attempt: int | None,
+) -> None:
+    """I15 for the worker side: one line in <session>/llm.log, same shape as
+    llm/log.py. The `run_id` belongs to the LLM process, which does not exist
+    yet, so it is null here and the job `attempt` identifies the line."""
+    record = {
+        "ts": utc_now(),
+        "run_id": None,
+        "attempt": attempt,
+        "from": from_state,
+        "to": to_state,
+        "reason": reason,
+    }
+    # A log that cannot be written must not fail the transcription.
+    try:
+        file_sink(session_dir)(record)
+    except OSError:
+        pass
 
 
 def transcription_args(config: AppConfig) -> argparse.Namespace:
@@ -182,6 +246,15 @@ def merge_track_transcripts(
     )
 
 
+def job_attempt(session_dir: Path) -> int | None:
+    """The attempt number run_job recorded in job.json, if readable."""
+    try:
+        attempts = read_json(session_dir / JOB_FILE).get("attempts")
+    except (OSError, ValueError):
+        return None
+    return attempts if isinstance(attempts, int) else None
+
+
 class SessionProcessor:
     def __init__(
         self,
@@ -229,6 +302,53 @@ class SessionProcessor:
                 )
             self._diarizer_loaded = True
         return self._diarizer
+
+    def save_transcript(
+        self,
+        session_dir: Path,
+        output_dir: Path,
+        transcript: Transcript,
+    ) -> str | None:
+        """Stato: SAVE_TRANSCRIPT. Writes every transcript file atomically
+        (I2) and records the `language_setting` metadata in transcript.json.
+
+        Returns None when all files are saved, else the class name of the
+        error (the reason of SAVE_TRANSCRIPT -> END_FATAL). It never lets the
+        original exception travel: its message could name anything.
+
+        transcript.json goes last, so its presence means the other files are
+        complete (recover_sessions and the job both treat it as the marker).
+        """
+        base = output_dir / "transcript"
+        try:
+            write_txt(base.with_suffix(".txt"), transcript)
+            write_srt(base.with_suffix(".srt"), transcript)
+            write_markdown(base.with_suffix(".md"), transcript)
+            write_speaker_txt(
+                base.with_suffix(".speakers.txt"),
+                transcript,
+            )
+            if transcript.diarization is not None:
+                write_rttm(
+                    base.with_suffix(".rttm"),
+                    session_dir.name,
+                    transcript.diarization,
+                )
+            write_json(
+                base.with_suffix(".json"),
+                transcript,
+                extra={LANGUAGE_KEY: language_setting(self.args.language)},
+            )
+        except Exception as exc:
+            try:
+                append_log(
+                    session_dir,
+                    f"Transcript save failed: {type(exc).__name__}: {exc}",
+                )
+            except OSError:
+                pass
+            return type(exc).__name__
+        return None
 
     def __call__(self, session_dir: Path) -> None:
         if not self.config.transcription.enabled:
@@ -350,21 +470,26 @@ class SessionProcessor:
             fraction=0.94,
             detail="Writing transcript files",
         )
-        base = output_dir / "transcript"
-        write_txt(base.with_suffix(".txt"), transcript)
-        write_srt(base.with_suffix(".srt"), transcript)
-        write_json(base.with_suffix(".json"), transcript)
-        write_markdown(base.with_suffix(".md"), transcript)
-        write_speaker_txt(
-            base.with_suffix(".speakers.txt"),
-            transcript,
+        attempt = job_attempt(session_dir)
+        log_worker_transition(
+            session_dir,
+            TRANSCRIPT_READY,
+            SAVE_TRANSCRIPT,
+            "transcript_ready",
+            attempt,
         )
-        if transcript.diarization is not None:
-            write_rttm(
-                base.with_suffix(".rttm"),
-                session_dir.name,
-                transcript.diarization,
+        reason = self.save_transcript(session_dir, output_dir, transcript)
+        if reason is not None:
+            log_worker_transition(
+                session_dir, SAVE_TRANSCRIPT, END_FATAL, reason, attempt
             )
+            # The worker stops here (T4): no LLM step. The job level decides
+            # whether to transcribe again; the user hears END_FATAL only
+            # after the last attempt (T45).
+            raise TranscriptSaveError(outcomes.fatal(reason).message)
+        log_worker_transition(
+            session_dir, SAVE_TRANSCRIPT, CHECK_LENGTH, "saved", attempt
+        )
 
         if self.config.on_stop:
             update_job_progress(

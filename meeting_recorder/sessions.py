@@ -36,7 +36,11 @@ def read_json(path: Path) -> dict[str, Any]:
     return loaded
 
 
-def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
+def atomic_write_text(path: Path, text: str) -> None:
+    """Writes `text` to a temporary file in the same directory, then renames
+    it over `path` (I2): a reader sees the old file or the new one, never half
+    of it. The temporary is named `.<name>.<random>.tmp`, the pattern that the
+    startup housekeeping removes if a kill leaves one behind."""
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = tempfile.NamedTemporaryFile(
         mode="w",
@@ -49,12 +53,17 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
     temporary = Path(handle.name)
     try:
         with handle:
-            json.dump(value, handle, ensure_ascii=False, indent=2)
-            handle.write("\n")
+            handle.write(text)
         os.replace(temporary, path)
     except Exception:
         temporary.unlink(missing_ok=True)
         raise
+
+
+def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
+    atomic_write_text(
+        path, json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    )
 
 
 def append_log(session_dir: Path, message: str) -> None:
