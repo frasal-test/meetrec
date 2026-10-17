@@ -15,6 +15,7 @@ Record and transcribe your Mac meetings locally: your voice and the other partic
 Cloud meeting bots and transcription services send your audio off your machine.
 A single mixed recording makes "who said what" unreliable.
 MeetRec keeps everything on your Mac and records you and the other participants separately.
+The one exception is optional and off until you set it up: meeting summaries send the transcript text (never the audio) to an LLM service you choose.
 
 ## Features
 
@@ -27,6 +28,7 @@ MeetRec keeps everything on your Mac and records you and the other participants 
 - Outputs: Markdown and per-speaker text to read and share, plus TXT, SRT, JSON, and RTTM when diarization ran; see [Which file to use](#which-file-to-use).
 - Optional `on_stop` hook that runs after the transcript is written.
 - `doctor` command to check the installation: Python version, Apple Silicon, pyannote 4 and access to its models.
+- Optional meeting summaries: after each transcript, send the text (never the audio) to an LLM you choose, Claude Haiku 5.5 (Anthropic), GPT-6 Luna (OpenAI) or gpt-oss-120b on Oracle OCI, and get a Markdown summary with participants, decisions, action items and open points. API keys stay in the macOS Keychain. See [Meeting summaries](#meeting-summaries-optional).
 
 ## Quick start
 
@@ -152,14 +154,16 @@ The MeetRec menu has:
 - Start recording — Italiano / English / Español / Auto detect
 - Stop recording
 - Open recordings
+- Open last summary, and Open emergency summary when there is one
 - Run doctor
+- Settings… (API keys and Automatic Summary, see [Meeting summaries](#meeting-summaries-optional))
 - Ask about participants before recording (on by default)
 - Delete audio after a clean transcript (off by default)
 - Quit MeetRec
 
 Before every recording MeetRec asks "Have you told the participants?" in the language of the preset (English for Auto detect). "Copy notice and record" also puts a short notice on the clipboard, ready to paste into the meeting chat. Ticking "Don't ask again" turns the question off; the menu item turns it back on. See [Responsible use](#responsible-use).
 
-While recording, the icon's right-hand sound bar becomes a dot and the elapsed time appears next to it. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The icon shows the percentage, then ✓ (or ! if the job failed), and the menu shows a progress bar with the current phase (phase names are in Italian), diarization included. A macOS notification appears when the job finishes.
+While recording, the icon's right-hand sound bar becomes a dot and the elapsed time appears next to it. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The icon shows the percentage, then ✓ (or ! if the job failed), and the menu shows a progress bar with the current phase, diarization included. A macOS notification appears when the job finishes.
 
 ### Terminal
 
@@ -191,16 +195,20 @@ recordings/
     ├── meta.json                  # track offsets, duration, session state
     ├── job.json                   # queue state, attempts, options
     ├── transcribe.log             # short status lines; the menu bar worker logs to recordings/.menubar.log
+    ├── llm.log                    # summary runs: state changes, tokens and cost (never keys or text)
     ├── audio/
     │   ├── mic.caf
     │   └── system.caf
-    └── transcripts/
-        ├── transcript.txt
-        ├── transcript.srt
-        ├── transcript.json        # canonical: per-segment speaker, track, word timestamps
-        ├── transcript.md
-        ├── transcript.speakers.txt
-        └── transcript.rttm        # only when diarization ran
+    ├── transcripts/
+    │   ├── transcript.txt
+    │   ├── transcript.srt
+    │   ├── transcript.json        # canonical: per-segment speaker, track, word timestamps
+    │   ├── transcript.md
+    │   ├── transcript.speakers.txt
+    │   └── transcript.rttm        # only when diarization ran
+    └── summaries/                 # only when you made a summary
+        ├── <run_id>.md            # the summary to read
+        └── <run_id>.json          # the same, with model, template, tokens and cost
 ```
 
 The default location is `recordings/` in the project folder; see [Configuration](#configuration) before changing it.
@@ -231,6 +239,37 @@ Thanks for joining. Let's start with the release schedule.
 
 Sure. We are on track for the first of the month.
 ```
+
+### Meeting summaries (optional)
+
+MeetRec can turn a transcript into a short summary with an LLM in the cloud. It is off until you save an API key in **Settings…**, and nothing is sent anywhere before that.
+
+**What leaves your Mac.** Only the text of `transcript.speakers.txt`, never the audio. From then on, the text is governed by the chosen service's terms of use, privacy policy and any agreement you have with it (SLA, DPA), not by MeetRec. Check them before using it for confidential meetings. Settings keeps this notice on screen.
+
+**Services.** One model per service; you need an account and an API key for at least one. [INSTALL.md](INSTALL.md#step-12--optional-meeting-summaries-with-an-llm) explains how to get them.
+
+| Service | Model | Price per million tokens (in / out) |
+| --- | --- | --- |
+| Anthropic | Claude Haiku 5.5 | $0.10 / $0.50 |
+| OpenAI | GPT-6 Luna | $0.10 / $0.50 |
+| Oracle OCI (Generative AI) | gpt-oss-120b | $0.15 / $0.60 |
+
+Prices are the ones built into this version, in USD; the service's own price list is what you pay. A one-hour meeting usually costs well under one cent.
+
+**How it works.** When a transcript is ready, a window asks what to do with it: a model, each with its maximum estimated cost, or **None** (keep the transcript only), and the response language (Ita, Eng, Esp, or Auto for the language of the transcript). Nothing is preselected. **Start** sends the text; the menu shows "Summarizing with …" and a notification tells you when the summary is saved. Click it, or use **Open last summary**, to open it. Closing the window is the same as None.
+
+**Automatic Summary.** In Settings you can tick Automatic Summary and pick a model: every transcript is then summarized with it, in the language of the transcript, without the window. If you later remove that model's key, the window comes back when another service still has one.
+
+**The summary.** `summaries/<run_id>.md` in the session folder, with five sections (Summary, Participants, Decisions, Action items, Open points) in the response language, and a header with the service, model, date and real cost. Participants are named only when the transcript says their names; otherwise they stay `ME`, `REMOTE_01` and so on. Every run makes new files; nothing is overwritten.
+
+**When it does not run.**
+
+- Transcripts under 150 words are not summarized: read them directly.
+- Transcripts too long for every model (beyond about 90,000 tokens, roughly five hours of speech) are not sent. A model whose context is too small for the transcript is shown greyed out.
+- A timeout, a lost connection, too many requests or a service that is down offer **Retry** once. Other errors (a key that no longer works, no credit left) end with a message. In every case the transcript was saved first.
+- If the summary cannot be written into the session folder, it is saved to `~/Library/Application Support/MeetRec/emergency/<run_id>.json` instead, and the menu shows **Open emergency summary**.
+
+**API keys.** Each key is checked with the service when you save it; a key that is refused is not saved, and the one you had stays. Keys live in the macOS Keychain, one item per service (`com.frasal.meetrec.llm`), and are read only after you pick a model, and only for that service. After each update macOS asks once for your login password to let the new build read the key; choose **Always Allow**. **Remove** deletes a key.
 
 ## Configuration
 
@@ -320,6 +359,8 @@ flowchart TD
     L --> M["on_stop hook"]
 ```
 
+After the transcript is written, the menu bar app starts the optional summary in a separate process (`python -m meeting_recorder.control llm-run <session>`), outside the transcription queue. The app shows the choice and retry windows and reads the Keychain; the Python process builds the prompt, calls the service and saves the result.
+
 If pyannote is not installed or the Hugging Face token is refused, the session is still transcribed with every remote voice labelled `REMOTE`. The reason is written to `transcript.json` under `warnings` and printed at the top of the TXT, Markdown and speakers files. Other failures fail the job and are retried up to `max_attempts`.
 
 ## Advanced
@@ -366,6 +407,8 @@ Run these from the project folder.
 
 The menu bar app writes the worker output (model download, per-segment lines, pyannote access help, tracebacks) to `recordings/.menubar.log`. Each session's `transcribe.log` only gets short status lines. For `meet.sh`, the background worker writes to the session's `transcribe.log`.
 
+Each summary run writes its steps, tokens and cost to the session's `llm.log`, never the keys or the text. Notification problems (for example, notifications turned off for MeetRec) go to `recordings/.menubar.log`.
+
 ### Re-transcribing
 
 Safe to repeat: it overwrites `transcripts/` and never touches `audio/`. It needs the audio, so it is not possible for a session whose audio was deleted by `delete_audio_after_transcription`.
@@ -384,13 +427,14 @@ Safe to repeat: it overwrites `transcripts/` and never touches `audio/`. It need
 - Transcription runs on the CPU; GPU acceleration is not used or tested.
 - Diarization applies only to the system track. pyannote uses MPS when available.
 - The first transcription downloads the `medium` model (about 1.5 GB, cached in `~/.cache/huggingface`); diarization adds about 32 MB. The Python environment is about 1 GB.
-- The "Permissions as seen by this terminal" line of `doctor` describes Terminal when run from Terminal, not MeetRec. The menu's Run doctor reports MeetRec's own grants (output in `recordings/.menubar.log`).
+- The "Permissions as seen by this terminal" line of `doctor` describes Terminal when run from Terminal, not MeetRec. The menu's Run doctor shows MeetRec's own checks in a window, with a button to open the full output in `recordings/.menubar.log`.
 - The first recording always fails until you enable Screen & System Audio Recording for MeetRec and restart it.
+- The summary models and their prices are built into each version. When a service retires a model, summaries with it fail with "Model no longer available" until you update MeetRec.
 - pyannote may print a "torchcodec is not installed correctly" warning when FFmpeg is absent. It is harmless; MeetRec passes audio in memory.
 
 ## Privacy and legal
 
-Processing is local. Models are downloaded from Hugging Face once and cached. MeetRec turns off pyannote's usage telemetry by default (`PYANNOTE_METRICS_ENABLED=false`). The `on_stop` hook is yours and may send data elsewhere.
+Recording and transcription are local. Meeting summaries, if you set them up, send the transcript text (never the audio) to the service you choose; see [Meeting summaries](#meeting-summaries-optional). Models are downloaded from Hugging Face once and cached. MeetRec turns off pyannote's usage telemetry by default (`PYANNOTE_METRICS_ENABLED=false`). The `on_stop` hook is yours and may send data elsewhere.
 
 ### Responsible use
 

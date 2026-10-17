@@ -520,6 +520,9 @@ is a folder named after its start time, for example
   output of recordings made from the menu bar (model download, progress,
   errors) is in `recordings/.menubar.log` instead. Read both when something
   failed.
+- `summaries/` — only if you set up meeting summaries ([Step 12](#step-12--optional-meeting-summaries-with-an-llm)):
+  one `.md` to read and one `.json` per summary. `llm.log` records each
+  summary run (steps, tokens, cost), never the keys or the text.
 
 Your voice is always labelled `ME`. Remote participants are separated on the
 system track when speaker separation is enabled.
@@ -530,6 +533,58 @@ system track when speaker separation is enabled.
 permissions, not MeetRec's, so Terminal itself (or iTerm) must be allowed under
 Microphone and Screen & System Audio Recording. Whether speakers are separated
 follows your configuration unless you pass `diar` or `nodiar`.
+
+## Step 12 — Optional: meeting summaries with an LLM
+
+Skip this step if transcripts are all you need. Nothing leaves your Mac until
+you save an API key here.
+
+With a key, MeetRec can send the **text** of each transcript (never the audio)
+to a cloud LLM and save a summary next to it. From that moment the text is
+governed by that service's terms of use and privacy policy (or your company's
+agreement with it), not by MeetRec. Check them before using it for
+confidential meetings.
+
+You need an account and an API key with at least one of these services. Each
+one bills you directly for what you use; a one-hour meeting usually costs well
+under one cent.
+
+**Anthropic (Claude Haiku 5.5).** Sign in at <https://console.anthropic.com>,
+add credit under Billing, then create a key under API keys. Copy it when it is
+shown: it starts with `sk-ant-`.
+
+**OpenAI (GPT-6 Luna).** Sign in at <https://platform.openai.com>, add credit
+under Billing, then create a secret key at <https://platform.openai.com/api-keys>.
+Copy it when it is shown: it starts with `sk-`.
+
+**Oracle OCI (gpt-oss-120b).** In the OCI Console, switch to a region that
+offers the Generative AI service, for example Germany Central (Frankfurt),
+`eu-frankfurt-1`. Open Analytics & AI → Generative AI → API keys and create a
+key; its secret is shown only once. Then give the key permission to call the
+models: on the key's page use **Add API Key Permissions**, which creates the
+IAM policy. MeetRec supports `eu-frankfurt-1`, `ap-hyderabad-1`, `ap-osaka-1`,
+`us-ashburn-1`, `us-chicago-1` and `us-phoenix-1`.
+
+Then, in MeetRec:
+
+1. Choose **Settings…** from the MeetRec menu.
+2. Paste the key into the field of its service. For Oracle OCI, first choose
+   the region where you created it.
+3. Click **Save**. The first time for each service, MeetRec explains what will
+   be sent; click **Continue**.
+4. MeetRec checks the key with the service. The very first key also installs
+   the services' Python packages, which takes a minute and needs a
+   connection. A green ✓ means the key is saved in the macOS Keychain. A key
+   the service refuses is not saved.
+
+From the next transcript on, a window asks which model to use, or **None**,
+and in which language to write the summary. Nothing is preselected. To skip the
+window, tick **Automatic Summary** in Settings and pick a model. See
+[Meeting summaries](README.md#meeting-summaries-optional) for the details.
+
+**Allow notifications.** MeetRec tells you with a notification when a summary
+is ready; click it to open the summary. If macOS asks, click Allow. If it never
+asked, turn MeetRec on in System Settings → Notifications.
 
 ---
 
@@ -684,6 +739,40 @@ The same text is in `transcripts/transcript.md` as a quoted warning and in
 [re-transcribe the session](#re-transcribing-a-session) if you want that meeting
 redone.
 
+### macOS asks for the "login" keychain password before a summary
+
+This happens once after each update or rebuild: the Keychain lets only the
+build that saved a key read it, and every build counts as new. Type your Mac
+password and click **Always Allow**; MeetRec does not ask again until the next
+update. MeetRec reads only the key of the model you chose, so you are asked for
+one service at a time. If you click **Deny**, the summary ends with "Could not
+use the … API key" and the transcript stays saved.
+
+### No notification when a summary or transcript is ready
+
+Notifications are turned off for MeetRec. Open System Settings →
+Notifications → MeetRec, turn on Allow notifications and pick the Banners or
+Alerts style. `recordings/.menubar.log` has a line beginning `notifications:`
+when macOS refused one. **Open last summary** in the menu works either way.
+
+### "Key not saved" in Settings
+
+The service refused the key: check that you copied all of it, that it has
+not been revoked, and that the account has credit. For Oracle OCI also check
+the region and that the key has its IAM policy (Add API Key Permissions). The
+key you had before, if any, is still saved.
+
+### The menu shows "LLM summary unavailable — run doctor"
+
+The check MeetRec runs at start found a problem with the summary files.
+Transcription is not affected. Choose **Run doctor**: the first line, Startup
+check, says what is wrong. Updating MeetRec usually fixes it.
+
+### "Model no longer available" after a summary
+
+The service has retired the model. Update MeetRec to get the current model
+table.
+
 ### Re-transcribing a session
 
 Transcribing again is safe: it overwrites the files in `transcripts/` and never
@@ -830,6 +919,12 @@ speaker separation):
 .venv/bin/python -m pip install -U -r requirements-diarization.txt
 ```
 
+If you use meeting summaries, update their packages too:
+
+```bash
+.venv/bin/python -m pip install -U -r requirements-summary.txt
+```
+
 ```bash
 ./meetrec.sh install
 ```
@@ -837,6 +932,10 @@ speaker separation):
 ```bash
 ./meetrec.sh doctor
 ```
+
+If you use meeting summaries, macOS asks once for your login password before
+the first summary after the update; see
+[macOS asks for the "login" keychain password](#macos-asks-for-the-login-keychain-password-before-a-summary).
 
 If `doctor` shows ✗ Python 3.10+, rebuild the environment as described in
 [doctor shows ✗ Python 3.10+, or pip cannot find pyannote.audio>=4](#doctor-shows--python-310-or-pip-cannot-find-pyannoteaudio4).
@@ -860,7 +959,12 @@ a clean Mac:
 
 - `~/Library/LaunchAgents/com.frasal.meetrec.plist.disabled` — the disabled
   LaunchAgent.
-- `~/Library/Application Support/MeetRec`
+- `~/Library/Application Support/MeetRec` — includes `emergency/`, where
+  summaries go when they cannot be saved in their session.
+- Your API keys for meeting summaries: remove them in **Settings…** before
+  uninstalling, or in Keychain Access search for `com.frasal.meetrec.llm` and
+  delete those items. Revoke them on the services' sites if you no longer
+  need them.
 - `~/.cache/huggingface` — the downloaded models, about 1.5 GB. Other programs
   may use them too.
 - `~/.config/meetrec` — your configuration, if you created one (ticking

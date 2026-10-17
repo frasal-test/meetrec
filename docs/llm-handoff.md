@@ -41,9 +41,8 @@ Cambiato durante i test (tutto committato e pushato):
 - Decisi e lasciati così: la key salvata resta se la nuova è rifiutata (c'è Remove); la copia di emergenza resta solo `.json`.
 
 ## Da fare
-1. **Script di prova reale** che l'utente lancia da sé con le proprie key (mai incollate in chat).
-2. **README e INSTALL** per quando si deciderà il rilascio: funzione, nota privacy, `summaries/`, come ottenere le key (per OCI: Console → Generative AI → API keys in Frankfurt, policy IAM da "Add API Key Permissions"), permesso alle notifiche, richiesta della password del Portachiavi dopo ogni aggiornamento.
-3. **Aperti, da decidere con l'utente**:
+1. README e INSTALL: fatti (sezione "Meeting summaries", passo 12, risoluzione dei problemi, aggiornamento, disinstallazione). Lo script di prova reale è stato tolto: l'utente non vuole confronti tra modelli per ora.
+2. **Aperti, da decidere con l'utente**:
    - Sintesi in prosa (template v4, commit di oggi): l'utente la prova con GPT-6 Luna e OCI, i due modelli che con v3 davano un elenco;
    - voce "elabora un transcript già salvato" (fuori ambito, ma utile per confrontare i modelli);
    - come OCI segnala il credito esaurito (non verificabile finché non succede);
