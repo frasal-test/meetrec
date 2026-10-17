@@ -1,193 +1,140 @@
-# Riassunto automatico con LLM: decisioni e piano
+# Riassunto con LLM: decisioni e piano
 
-Riepilogo della sessione di analisi del 16 ottobre 2026, da usare come punto di partenza per implementare la funzione. Prezzi e documentazione sono verificati sulle fonti ufficiali alla stessa data, salvo dove indicato "da verificare".
+Piano di implementazione del riassunto con LLM. La specifica **vincolante** è in [`docs/flow/`](flow/): `flow.md` (stati, transizioni, invarianti), `adapter-contract.md`, `ui.md`, `test-scenarios.md`. Se questo piano e la specifica non coincidono, vale la specifica.
+
+Analisi iniziale del 16 ottobre 2026, aggiornata il 17 ottobre 2026 con la specifica del flusso. Prezzi e documentazione sono verificati sulle fonti ufficiali alla data del 16 ottobre, salvo dove indicato "da verificare".
 
 ## Obiettivo
 
-Dopo la trascrizione locale, MeetRec può generare `transcripts/summary.md` con sintesi, decisioni, azioni e punti aperti, inviando **solo il testo** del transcript (mai l'audio) a un LLM in cloud scelto dall'utente.
+Dopo la trascrizione locale, MeetRec può creare un riassunto (sintesi, decisioni, azioni, punti aperti) inviando **solo il testo** del transcript, mai l'audio, a un LLM in cloud scelto dall'utente.
 
-## Decisioni di prodotto (già prese)
+## Decisioni di prodotto
 
-Ragionate dal punto di vista dell'utente: niente scelte tecniche esposte.
+- **Nessun LLM all'installazione.** `setup.sh` non chiede nulla sul riassunto. MeetRec si presenta con "tutto resta sul tuo Mac": il cloud è una scelta esplicita.
+- **Finestra "Settings…"** nella menu bar, fuori dal flusso:
+  - API key per Anthropic, OpenAI e Oracle OCI (più la region per OCI, proposta `eu-frankfurt-1`);
+  - ogni key si verifica con una chiamata minima quando viene salvata (I4) e finisce nel **Portachiavi di macOS**, mai in `.env` o `config.json`;
+  - avviso prima di salvare la prima key di un servizio: "Il testo della riunione (non l'audio) verrà inviato a <servizio> per creare il riassunto.";
+  - interruttore **Automatic Summary**, spento all'installazione. Per accenderlo l'utente sceglie il modello di default tra quelli con key, senza preselezione.
+- **Modalità manuale** (default): dopo ogni transcript compare ASK_CHOICE, con modello o "Nessuno" e lingua di risposta, senza preselezione (I5).
+- **Modalità automatica**: ASK_CHOICE viene saltata e si usano il modello di default con la lingua di risposta Auto. "Riprova" resta una scelta dell'utente (I10).
+- **Un solo modello per servizio**, scelto da noi e fisso nella tabella modelli.
+- **Prezzi e stime in USD.**
+- **Fuori dalla prima versione**: fascia qualità, modello locale (Ollama/MLX), Batch API, voce di menu "elabora un transcript già salvato".
 
-- **Spento di default.** MeetRec si presenta con "tutto resta sul tuo Mac": il cloud è una scelta esplicita.
-- **Niente domande sul riassunto in `setup.sh`.** MeetRec si installa senza LLM esterno; l'opzione si attiva dopo, dalla voce **"Settings…"** della menu bar.
-- Nella finestra Settings c'è un interruttore "Automatic summary" (testo definitivo da decidere). Attivandolo compare la scelta del servizio:
-  - menu a tendina (o radio button) "Anthropic / OpenAI / Oracle OCI";
-  - il servizio scelto mostra solo i campi che servono: API key per tutti, più la region per OCI (proposta `eu-frankfurt-1`);
-  - la chiave si verifica subito con una chiamata minima, come fa `check_token` con Hugging Face.
-- **Modello fisso per servizio**, scelto da noi. Si può cambiare a mano in `config.json` insieme al base URL, ma non compare in Settings.
-- **Chiavi in `.env`** (già in `.gitignore`, permessi 600), come `HF_TOKEN`. Mai in `config.json`.
-- **Avviso prima di attivare**, nella finestra Settings: "Il testo della riunione (non l'audio) verrà inviato a <servizio> per creare il riassunto."
-- **Fuori dalla prima versione**: scelta della fascia qualità nell'interfaccia, modello locale (Ollama/MLX), Batch API.
-
-
-## Modelli scelti
+## Tabella modelli
 
 Costo stimato per una riunione di 1h: circa 15–20mila token in ingresso (italiano) e 1–2mila in uscita.
 
-| Servizio | Modello (id esatto) | Prezzo per 1M token (input / output) | Costo per riunione | Variabile in `.env` |
+| `provider` | `model_id` | Prezzo per 1M token (input / output, USD) | `context_window` | Costo per riunione |
 |---|---|---|---|---|
-| Anthropic | `claude-haiku-5-5` | $0,10 / $0,50 (oltre 100mila token di input: $0,50 / $2,50) | ~$0,003 | `ANTHROPIC_API_KEY` |
-| OpenAI | `gpt-6-luna` | $0,10 / $0,50 (cache $0,01; long context $0,20 / $0,75; Batch e Flex a metà prezzo) | ~$0,003 | `OPENAI_API_KEY` |
-| Oracle OCI | `openai.gpt-oss-120b` | $0,15 / $0,60 | ~$0,004 | `OCI_GENAI_API_KEY` |
+| `anthropic` | `claude-haiku-5-5` | 0,10 / 0,50 (oltre 100mila token di input: 0,50 / 2,50) | 1M | ~$0,003 |
+| `openai` | `gpt-6-luna` | 0,10 / 0,50 (long context 0,20 / 0,75) | ~1M (da verificare) | ~$0,003 |
+| `oci` | `openai.gpt-oss-120b` | 0,15 / 0,60 | 128K (prompt + risposta) | ~$0,004 |
 
-Con 20 riunioni al mese la spesa è di pochi centesimi: il prezzo non è un criterio di scelta.
-
-Fascia qualità, per chi la imposta a mano in `config.json`:
-- `claude-sonnet-5-5`: $2 / $10, circa $0,06 a riunione.
-- `gpt-6.1-sol`: $2 / $10, circa $0,06 a riunione.
-- Su OCI non c'è un equivalente recente. Gemini 2.5 Pro costa $1,25 / $10, ma non è disponibile con API key OpenAI-compatibile e fa chiamate esterne verso Google.
+La tabella ha un solo prezzo per modello. I prezzi maggiorati per il long context (Anthropic oltre 100mila token, OpenAI oltre una soglia da verificare) fanno sì che il costo calcolato sia **sottostimato** per riunioni molto lunghe. Va deciso se aggiungere una seconda fascia di prezzo alla tabella: è una modifica di `adapter-contract.md`.
 
 Alternative OCI scartate:
 - **gpt-oss-20b** ($0,07 / $0,30): più economico, ma più debole in italiano.
-- **Gemini 2.5 Flash Lite** ($0,10 / $0,40): non è raggiungibile con l'API key sull'endpoint OpenAI-compatibile, richiede l'endpoint `/google` e l'SDK Google, e manda le richieste a Google.
+- **Gemini 2.5 Flash Lite** ($0,10 / $0,40): non si raggiunge con l'API key sull'endpoint OpenAI-compatibile; richiede l'endpoint `/google` e l'SDK Google, e manda le richieste a Google.
 - **Grok**: le chiamate escono verso xAI.
 
-## Dettagli API per servizio
+## Dettagli API per adapter
+
+Regole comuni (`adapter-contract.md`): `max_retries=0`, timeout 10 s per la connessione e 180 s per la lettura, SDK importato al primo uso, errori normalizzati in base allo status HTTP **e al corpo** della risposta.
 
 ### Anthropic: `claude-haiku-5-5`
 
-- SDK Python `anthropic` (1.x, basato su `httpx2`, Python ≥ 3.10). Client `anthropic.Anthropic()`, che legge `ANTHROPIC_API_KEY`.
-- Chiamata: `client.messages.create(model="claude-haiku-5-5", max_tokens=16000, system=..., messages=[...], output_config={"effort": "low"})`.
-- **Effort `low`**: il ragionamento è sempre attivo e si paga come output; il default è `medium`. Per un riassunto basta `low`.
-- **Non passare** `thinking={"type": "enabled", "budget_tokens": ...}` (errore 400). Non serve passare `thinking`.
-- **Niente prefill** dell'assistente (errore 400).
-- Nella risposta, leggere solo i blocchi con `type == "text"`. Possono esserci blocchi `thinking` vuoti.
-- Controllare `stop_reason`:
-  - `"max_tokens"` significa riassunto troncato;
-  - `"refusal"` significa rifiuto, e su Haiku 5.5 non c'è un fallback lato server: registrarlo come avviso.
-- Errori: catena `RateLimitError` → `APIStatusError` → `APIConnectionError`. L'SDK fa già 2 tentativi su 429 e 5xx.
-- Contesto da 1M di token: qualsiasi riunione entra in una sola chiamata.
+- SDK Python `anthropic` (1.x, Python ≥ 3.10). Client `anthropic.Anthropic(api_key=..., max_retries=0, timeout=...)`.
+- Chiamata: `client.messages.create(model=..., max_tokens=<max_output_tokens>, system=..., messages=[...], output_config={"effort": "low"})`.
+- **Non passare** `thinking={"type": "enabled", ...}` e **niente prefill** dell'assistente: entrambi danno errore 400.
+- Testo: solo i blocchi con `type == "text"`.
+- `stop_reason`: `"max_tokens"` → `truncated`; `"refusal"` → `ContentFilteredError`.
+- Credito esaurito: 400 con messaggio sul saldo crediti → `InsufficientCreditsError` (T28).
 
 ### OpenAI: `gpt-6-luna`
 
-- SDK Python `openai`, client `OpenAI()`, che legge `OPENAI_API_KEY`.
-- Chiamata: `client.chat.completions.create(model="gpt-6-luna", messages=[{"role": "system", ...}, {"role": "user", ...}])`.
-- **Da verificare** sulla documentazione del modello:
-  - che Luna supporti Chat Completions oppure solo Responses API;
-  - il parametro per limitare il ragionamento;
-  - la soglia short/long context, che non è sulla pagina prezzi.
-- Il contesto dichiarato da fonti di terzi è di circa 1M di token.
+- SDK Python `openai`. Client `OpenAI(api_key=..., max_retries=0, timeout=...)`.
+- 429 con `insufficient_quota` nel corpo → `InsufficientCreditsError`; 429 senza → `RateLimitError` (T26, T27).
+- **Da verificare prima di scrivere l'adapter**: se Luna supporta Chat Completions o solo Responses API, il parametro per limitare il ragionamento, la soglia del long context e il `context_window` esatto.
 
 ### Oracle OCI: `openai.gpt-oss-120b` con OCI Generative AI API key
 
-- Chiave di servizio, annunciata il 21 gennaio 2026. **Non** è una IAM API key con PEM e fingerprint: nessuna firma delle richieste e nessun wrapper OCI.
-- Stesso SDK `openai`:
-  ```python
-  OpenAI(
-      api_key=os.environ["OCI_GENAI_API_KEY"],
-      base_url=f"https://inference.generativeai.{region}.oci.oraclecloud.com/20231130/actions/v1",
-  )
-  ```
-  poi `client.chat.completions.create(model="openai.gpt-oss-120b", messages=[...])`.
-- **Endpoint ufficiale**: `/20231130/actions/v1`, dalla pagina Oracle "API Keys". L'esempio ufficiale **non usa il project OCID**.
-  - Il repository `oracle-samples/oci-genai-auth-python` usa invece `/openai/v1` con `project=<OCID>`.
-  - Non sono intercambiabili senza verifica: usare `/20231130/actions/v1`.
-- Modelli supportati con API key:
-  - Chat Completions: Meta Llama, xAI Grok, OpenAI gpt-oss;
-  - Responses API: Grok e gpt-oss.
-- Regioni supportate con l'SDK OpenAI: Frankfurt, Hyderabad, Osaka, Ashburn, Chicago, Phoenix.
-  - **`eu-frankfurt-1`**: gpt-oss-120b è disponibile on-demand e ospitato da OCI, senza chiamate esterne, quindi il testo resta a Frankfurt.
-  - La chiave deve essere nella stessa region del modello.
-- **Contesto**: 128mila token in totale tra prompt e risposta, cioè circa 5–6 ore di riunione. Oltre, saltare il riassunto con un avviso nel log. Non troncare in silenzio.
-- **Lato amministratore OCI**:
-  - creare la chiave in Generative AI → API keys;
-  - autorizzarla con una policy IAM (pagina "Add API Key Permissions").
-  - Ogni chiave ha due segreti (key-one e key-two) per la rotazione. Il segreto si vede una volta sola.
-- Nell'esempio Oracle la variabile si chiama `OPENAI_API_KEY`. Noi usiamo `OCI_GENAI_API_KEY` per non scontrarci con una chiave OpenAI vera.
-- La compatibilità OpenAI non garantisce tutte le funzioni. A noi serve solo una chiamata di testo, senza streaming, tool o output strutturato.
+- Chiave di servizio, non una IAM API key con PEM: nessuna firma delle richieste.
+- Stesso SDK `openai`, con `base_url=f"https://inference.generativeai.{region}.oci.oraclecloud.com/20231130/actions/v1"`, poi `chat.completions.create(model="openai.gpt-oss-120b", ...)`.
+  - Usare l'endpoint ufficiale `/20231130/actions/v1`, senza project OCID. L'esempio `oracle-samples` usa `/openai/v1` con `project=<OCID>`: le due forme non sono intercambiabili senza verifica.
+- Regioni supportate con l'SDK OpenAI: Frankfurt, Hyderabad, Osaka, Ashburn, Chicago, Phoenix. In **`eu-frankfurt-1`** il modello è ospitato da OCI e il testo resta a Frankfurt. La chiave deve essere nella stessa region del modello.
+- **Contesto**: 128mila token tra prompt e risposta, cioè circa 5–6 ore di riunione. Oltre questo limite vale I17: il modello risulta disattivato in ASK_CHOICE, oppure in modalità automatica si arriva a END_NO_LLM `too_long`.
+- **Lato amministratore OCI**: creare la chiave in Generative AI → API keys e autorizzarla con una policy IAM ("Add API Key Permissions"). Ogni chiave ha due segreti per la rotazione; il segreto si vede una volta sola.
+- Come segnala OCI il credito esaurito va verificato (nota di `adapter-contract.md`).
 
 ## Contesto del codice MeetRec
 
-- **Pipeline**: `meeting_recorder/session_transcription.py`, metodo `SessionProcessor.__call__`.
-  - Scrive gli output in `session_dir / "transcripts"`: `transcript.txt/.srt/.json/.md/.speakers.txt` e `.rttm`.
-  - Poi esegue l'hook `on_stop` con fase di avanzamento `on_stop` a 0.98.
-  - Il riassunto va **dopo la scrittura degli output e prima di `on_stop`**, con `update_job_progress(phase="summarizing", fraction≈0.96, ...)`.
-  - Se fallisce, deve fare come `on_stop`: `append_log(...)` senza invalidare il transcript.
-- **Input per l'LLM**: `transcripts/transcript.speakers.txt`, scritto da `write_speaker_txt` in `meeting_recorder/transcription.py`.
-  - Formato delle righe: `[HH:MM:SS.mmm - HH:MM:SS.mmm] SPEAKER: testo`.
-  - `ME` è chi registra; `REMOTE_01`, `REMOTE_02`… sono gli altri partecipanti (`REMOTE` se la diarizzazione è saltata).
-  - Eventuali righe iniziali `[MeetRec] ...` sono avvisi.
-- **Config**: `meeting_recorder/config.py`.
-  - Le dataclass `AppConfig` e `TranscriptionConfig` vengono riempite da `_merge_transcription`.
-  - Il file è `~/.config/meetrec/config.json`; l'esempio è `config.example.json`.
-  - `set_config_value` scrive una chiave di primo livello.
-- **Variabili d'ambiente**: `load_env_files()` in `transcription.py` carica `.env` del progetto e della cwd con `setdefault`.
-- **Setup**: `setup.sh` è bilingue: `say "english" "italiano"`, più `warn` e `ask_secret`.
-  - Il token Hugging Face segue `read_token` → `check_token` → `save_token`.
-  - `save_token` scrive `HF_TOKEN` in `.env` con un file temporaneo, `chmod 600` e `mv`. Per le chiavi LLM serve la stessa logica, ma in Python (vedi `control.py`), perché la scrittura parte da Settings e non da `setup.sh`.
-  - La config si scrive da Python inline, come in `set_speaker_separation`.
-- **Dipendenze opzionali**: esiste già `requirements-diarization.txt`; serve lo stesso schema per `requirements-summary.txt` (`anthropic`, `openai`).
-- **Menu bar**: `menubar.swift`, metodo `rebuildMenu()`, con etichette in inglese ("Open recordings", "Run doctor", …).
-  - La notifica "Transcript ready: <sessione>" è intorno alla riga 597.
-  - Oggi **non c'è una finestra Settings**: solo voci di menu e `NSAlert`. Va costruita da zero.
-  - Lo Swift chiama Python con `Process` su `python -m meeting_recorder.control <argomenti>` (`controlOutput`, intorno alla riga 187).
-- **CLI**: `meeting_recorder/control.py` (sottocomandi argparse, tra cui `doctor`).
-- **Test**: `tests/` con `unittest`. La CI (`.github/workflows/ci.yml`) esegue `python -m unittest discover -s tests -v` su Python 3.10–3.13 (Ubuntu), compila la parte Swift su macOS e controlla gli script con `bash -n`.
-  - I test non devono usare la rete: fare mock dei client.
+- **Pipeline**: `SessionProcessor.__call__` in `meeting_recorder/session_transcription.py` scrive `transcript.txt/.srt/.json/.md/.speakers.txt` (e `.rttm`) in `<sessione>/transcripts/` con `path.write_text`, che **non è atomico**. Poi esegue `on_stop`.
+- **Atomicità**: `atomic_write_json` in `meeting_recorder/sessions.py` (temporaneo + `os.replace`) è il modello da generalizzare.
+- **Log**: `append_log` scrive testo libero in `<sessione>/transcribe.log`.
+- **Job**: `run_job` rifà la trascrizione se c'è un'eccezione, fino a `max_attempts` (3).
+- **Lingua**: il preset scelto nel menu (Italian / English / Spanish / Auto) arriva come opzione `language` (`None` per Auto). `Transcript.language` contiene invece la lingua *rilevata* (per esempio `"it,en"`) e non va usata come metadato del flusso.
+- **Input per l'LLM**: `transcript.speakers.txt`, righe `[HH:MM:SS.mmm - HH:MM:SS.mmm] SPEAKER: testo`. `ME` è chi registra; `REMOTE_xx` sono gli altri partecipanti. Le righe `[MeetRec] ...` sono avvisi e vanno escluse.
+- **Menu bar**: `menubar.swift` lancia `python -m meeting_recorder.control` con `Process` (`runControl`, `controlOutput`) ed esegue `worker --once` su una coda seriale. Notifica "Transcript ready" in `enqueueAndTranscribe`. Oggi non c'è una finestra Settings.
+- **Doctor**: `doctor()` in `control.py` si lancia solo a mano dal menu e controlla l'accesso ai modelli Hugging Face via rete.
+- **Test**: `tests/` con `unittest`. La CI esegue `python -m unittest discover -s tests -v` su Python 3.10–3.13 (Ubuntu) e compila lo Swift su macOS.
 
 ## Moduli da creare o modificare
 
-1. **`meeting_recorder/summary.py`** (nuovo)
-   - `summarize_session(session_dir, config) -> Path | None`: legge `transcript.speakers.txt`, chiama il servizio e scrive `transcripts/summary.md`.
-   - Un'interfaccia comune: `summarize(text, language) -> str`, con due implementazioni:
-     - `AnthropicSummarizer`;
-     - `OpenAICompatibleSummarizer`, che serve sia OpenAI sia OCI cambiando `base_url`, nome della variabile della chiave e modello.
-   - Import pigri di `anthropic` e `openai`, così chi non attiva il riassunto non ha bisogno dei pacchetti.
-   - Stima della dimensione prima della chiamata, con un limite per servizio (OCI 128mila token in totale).
-   - Ritorna avvisi leggibili; non lancia eccezioni che blocchino la pipeline.
-2. **`meeting_recorder/config.py`**
-   - Nuova `SummaryConfig`: `enabled=False`, `provider: str | None` (`"anthropic" | "openai" | "oci"`), `model: str | None` (default per servizio), `region="eu-frankfurt-1"` (solo OCI), `base_url: str | None` (override).
-   - `_merge_summary` con validazione del provider. Campo `summary` in `AppConfig`.
-   - Aggiornare `config.example.json`.
-3. **`meeting_recorder/session_transcription.py`**: chiamata a `summarize_session` dopo gli output e prima di `on_stop`, con fase di avanzamento e log.
+Ogni funzione che implementa una parte del flusso indica nel docstring lo stato o la transizione corrispondente (per esempio `Stato: ASK_CHOICE`).
+
+1. **`meeting_recorder/llm/`** (nuovo pacchetto)
+   - `types.py`: `LLMRequest`, `LLMResponse`, `Usage`, `Cost`.
+   - `errors.py`: gli errori normalizzati con `retryable`, `usage`, `cost` e messaggio per l'utente.
+   - `models.py`: la tabella modelli, `cost()`, `estimate_max_cost()` e `fits_context()` come funzioni pure.
+   - `adapters/`: `anthropic.py` e `openai_compat.py` (OpenAI e OCI), più un registro degli adapter. Sono gli unici moduli che importano SDK (I9).
+   - `keys.py`: interfaccia di sola lettura sulle key (vedi "Portachiavi").
+   - `prompts/`: template `it`, `en`, `es` e `build_prompt` (I6, I7, I8).
+   - `storage.py`: `run_id`, scrittura atomica del risultato, salvataggio di emergenza (I2, I13, I14).
+   - `flow.py`: la macchina a stati da CHECK_LENGTH in poi. Le schermate passano da un'interfaccia `UserInterface` (ASK_CHOICE, ASK_RETRY, avanzamento, esito), così nei test basta un fake. Log strutturato di ogni transizione (I15) ed esiti distinti (I16).
+   - `checks.py`: controllo all'avvio offline e housekeeping.
+2. **`meeting_recorder/session_transcription.py`**: TRANSCRIPT_READY e SAVE_TRANSCRIPT. Scritture atomiche, e metadato `language` (`it/en/es/auto`) salvato con il transcript. Il job conserva i suoi tentativi; END_FATAL viene comunicato dopo l'ultimo (T45).
+3. **`meeting_recorder/config.py`**: `SummaryConfig(automatic=False, default_model=None, oci_region=None)`. Default spento, nessun modello di default. Aggiornare `config.example.json`.
 4. **`meeting_recorder/control.py`**
-   - Sottocomando `summarize <sessione>`, per rifare o provare il riassunto su una sessione già trascritta.
-   - Sottocomandi usati dalla finestra Settings, così lo Swift non scrive mai `.env` o `config.json` da solo:
-     - `summary-status`: stato attuale in JSON (attivo, servizio, region, chiave presente sì/no; mai la chiave);
-     - `summary-enable --provider <p> [--region <r>]`: legge la chiave da **stdin** (mai come argomento, sarebbe visibile in `ps`), installa `requirements-summary.txt` nel `.venv` se mancano i pacchetti, verifica la chiave con una chiamata minima, la salva in `.env` (file temporaneo, `chmod 600`, `mv`) e scrive il blocco `summary` nella config. Se qualcosa fallisce non cambia nulla e restituisce un messaggio leggibile;
-     - `summary-disable`: mette `enabled=false` e lascia la chiave in `.env`.
-   - In `doctor`, se il riassunto è attivo: pacchetto installato, chiave presente e servizio valido.
-5. **`setup.sh`**: nessuna modifica per il riassunto. L'installazione resta senza LLM esterno.
-6. **`requirements-summary.txt`** (nuovo): `anthropic`, `openai`. Viene installato da `summary-enable`, non da `setup.sh`.
-7. **`menubar.swift`**
-   - Voce "Settings…" nel menu, che apre una piccola finestra (AppKit, come il resto dell'app):
-     - interruttore "Automatic summary";
-     - scelta del servizio, campo API key (`NSSecureTextField`) e, solo per OCI, la region;
-     - l'avviso privacy prima di confermare;
-     - pulsante di conferma che lancia `summary-enable` in background, con indicatore di attesa e messaggio di esito.
-   - All'apertura legge lo stato con `summary-status`.
-   - Voce "Open summary" quando la sessione ha `transcripts/summary.md`.
-   - La notifica dice che il riassunto è pronto.
-8. **Documentazione**
-   - `README.md`: funzione e nota privacy; tabella "Which file to use" con `summary.md`.
-   - `INSTALL.md`: come attivare il riassunto da Settings e come ottenere le chiavi; per OCI, i passi dell'amministratore e la policy IAM.
-9. **Test**: config (default spento, provider non valido), scelta del modello di default, scrittura di `summary.md` con client finti, gestione di errori, rifiuti e testo troppo lungo, `summary-enable` / `summary-disable` / `summary-status` (chiave letta da stdin, `.env` con permessi 600, nessuna modifica se la verifica fallisce).
+   - `llm-run <sessione>`: esegue il flusso da CHECK_LENGTH. Protocollo con lo Swift: eventi JSON su stdout (`ask_choice`, `ask_retry`, `progress`, `outcome`) e risposte JSON su stdin.
+   - `startup-check`: il controllo all'avvio offline. `doctor` lo include e aggiunge i controlli di rete.
+   - Sottocomandi per Settings: verifica di una key (letta da stdin, mai da argv), `auto-summary on --model <id>` / `off`, stato in JSON (mai le key).
+   - Installazione di `requirements-summary.txt` nel `.venv` quando si salva la prima key.
+5. **`requirements-summary.txt`** (nuovo): `anthropic`, `openai`.
+6. **`menubar.swift`**
+   - Controllo all'avvio con `startup-check`: se fallisce, il flusso LLM non parte e il menu lo segnala.
+   - Dopo "Transcript ready", lancia `llm-run` fuori dalla coda di trascrizione.
+   - Schermate ASK_CHOICE e ASK_RETRY, indicatore di attesa e messaggi di esito come in `ui.md`.
+   - Finestra Settings come in `ui.md`.
+7. **Documentazione**: `README.md` (funzione e nota privacy, `summaries/` nella tabella "Which file to use") e `INSTALL.md` (come ottenere le key; per OCI i passi dell'amministratore e la policy IAM).
+8. **Test**: almeno un test automatico per ogni scenario di `test-scenarios.md` (T1–T47), con adapter fake, Portachiavi fake e nessuna rete.
+
+## Portachiavi
+
+La finestra Settings è in Swift, quindi il Portachiavi lo gestisce l'app con il framework Security: salvataggio, lettura e cancellazione, una voce per provider.
+- La key non passa mai in argv né in una variabile d'ambiente: argv è visibile in `ps`, l'ambiente si eredita.
+- Verifica: Swift passa la key su stdin al sottocomando di verifica; se la verifica riesce, Swift la salva nel Portachiavi.
+- `llm-run`: all'avvio Swift passa su stdin, in un unico messaggio iniziale, le key presenti. Il Python le tiene solo in memoria e `is_configured` controlla quel messaggio.
+- Leggere il Portachiavi direttamente dal Python (`security find-generic-password`) farebbe comparire una richiesta di accesso di macOS per voci create da MeetRec.app. Per questo lo evitiamo.
 
 ## Prompt di riassunto
 
-- **Lingua del riassunto**: sempre quella della riunione.
-  - Con `transcription.language` impostato (it / en / es) c'è un prompt scritto in quella lingua.
-  - Con il rilevamento automatico il prompt è in inglese e chiede al modello di scrivere il riassunto nella lingua prevalente della riunione.
-- **Il transcript è un dato, non un'istruzione.** Va nel messaggio utente dentro un delimitatore, per esempio `<transcript>…</transcript>`. Nel prompt di sistema va scritto di ignorare le istruzioni contenute nel parlato.
+- **Template** (I6): stessa lingua del transcript (`it`/`en`/`es`); con `auto` o metadato assente, inglese.
+- **Lingua di risposta** (I7): scelta in ASK_CHOICE (Ita/Eng/Esp/Auto), sempre Auto in modalità automatica. È sempre un'istruzione esplicita nel prompt.
+- **Il transcript è un dato** (I8): sta tra delimitatori espliciti, per esempio `<transcript>…</transcript>`, e il system prompt dichiara che il contenuto delimitato non contiene istruzioni da eseguire.
 - Avvertire il modello che:
   - il testo viene da un riconoscimento vocale e può contenere errori;
   - `ME` è chi registra e `REMOTE_xx` sono gli altri partecipanti;
   - non deve inventare nomi o attribuzioni.
-- Struttura provvisoria di `summary.md`:
-  - **Sintesi**: 5–10 righe;
-  - **Decisioni**;
-  - **Azioni**: chi, cosa ed eventuale scadenza;
-  - **Punti aperti**.
-  - In testa una riga con servizio e modello usati e il nome della sessione.
+- Struttura provvisoria di `summaries/<run_id>.md`: in testa servizio, modello e sessione; poi **Sintesi** (5–10 righe), **Decisioni**, **Azioni** (chi, cosa, eventuale scadenza) e **Punti aperti**.
 
 ## Da verificare prima del rilascio
 
-- **Prova reale su una tenancy OCI** in `eu-frankfurt-1`: endpoint `/20231130/actions/v1`, policy IAM, model id `openai.gpt-oss-120b` on-demand.
-  - Va fatta sul Mac o con la chiave come secret dell'ambiente, **mai incollata in chat**.
-- **GPT-6 Luna**: Chat Completions o Responses API, parametro di ragionamento, soglia del long context.
-- **Prova di qualità**: 3–5 transcript veri di MeetRec, riassunti con Haiku 5.5, Luna e gpt-oss-120b, poi confrontati. Costo totale: pochi centesimi.
+- **GPT-6 Luna**: Chat Completions o Responses API, parametro di ragionamento, soglia del long context, `context_window`.
+- **Credito esaurito su OCI**: come lo segnala.
+- **Prova reale su una tenancy OCI** in `eu-frankfurt-1`: endpoint, policy IAM, model id on-demand. Va fatta sul Mac, **mai con la key incollata in chat**.
+- **Prova di qualità**: 3–5 transcript veri, riassunti con i tre modelli e confrontati.
 - **Compilazione e prova della parte Swift**: possibili solo su macOS.
 
 ## Fonti
