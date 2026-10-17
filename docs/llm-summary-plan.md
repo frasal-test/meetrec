@@ -129,7 +129,8 @@ La finestra Settings è in Swift, quindi il Portachiavi lo gestisce l'app con il
   - il testo viene da un riconoscimento vocale e può contenere errori;
   - `ME` è chi registra e `REMOTE_xx` sono gli altri partecipanti;
   - non deve inventare nomi o attribuzioni.
-- Struttura provvisoria di `summaries/<run_id>.md`: in testa servizio, modello e sessione; poi **Sintesi** (5–10 righe), **Decisioni**, **Azioni** (chi, cosa, eventuale scadenza) e **Punti aperti**.
+- Struttura di `summaries/<run_id>.md`: in testa sessione, servizio, modello, data e costo; poi **Sintesi** (5–10 righe), **Partecipanti**, **Decisioni**, **Azioni** (chi, cosa, eventuale scadenza) e **Punti aperti**.
+- **Partecipanti** (decisione del 17 ottobre 2026): una riga per etichetta (`ME`, `REMOTE_xx`); nome e ruolo solo se detti esplicitamente nella trascrizione, un ruolo dedotto scritto come "probabilmente …", altrimenti "non indicato"; mai un nome dedotto (template v3).
 
 ## Da verificare prima del rilascio
 

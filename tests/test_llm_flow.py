@@ -279,7 +279,7 @@ class SuccessAndErrorTests(FlowTestCase):
         self.assertEqual(record["provider"], "anthropic")
         self.assertEqual(record["model"], "claude-haiku-5-5")
         self.assertEqual(record["mode"], "manual")
-        self.assertEqual(record["template_id"], "summary-it-v2")
+        self.assertEqual(record["template_id"], "summary-it-v3")
         self.assertEqual(record["template_language"], "it")
         self.assertEqual(record["response_language"], "en")
         self.assertEqual(record["status"], "complete")

@@ -49,7 +49,7 @@ class TemplateTests(unittest.TestCase):
             with self.subTest(language=language):
                 request = build(language)
                 self.assertEqual(request.template_language, language)
-                self.assertEqual(request.template_id, f"summary-{language}-v2")
+                self.assertEqual(request.template_id, f"summary-{language}-v3")
                 self.assertTrue(
                     request.system_prompt.startswith(load_template(language))
                 )
@@ -57,7 +57,7 @@ class TemplateTests(unittest.TestCase):
     def test_T14_auto_uses_the_english_template(self):
         request = build("auto")
         self.assertEqual(request.template_language, "en")
-        self.assertEqual(request.template_id, "summary-en-v2")
+        self.assertEqual(request.template_id, "summary-en-v3")
 
     def test_T15_missing_metadata_uses_english_and_is_logged(self):
         lines: list[str] = []
@@ -89,16 +89,30 @@ class TemplateTests(unittest.TestCase):
         request = build("it", response_language="en")
         self.assertIn(
             "Use these section headings, in this order: ## Summary, "
-            "## Decisions, ## Action items, ## Open points.",
+            "## Participants, ## Decisions, ## Action items, ## Open points.",
             request.system_prompt,
         )
         request = build("en", response_language="es")
-        self.assertIn("## Síntesis, ## Decisiones", request.system_prompt)
+        self.assertIn("## Síntesis, ## Participantes, ## Decisiones", request.system_prompt)
         request = build("it", response_language="auto")
         self.assertIn(
             "Write the section headings in the same language as the transcript.",
             request.system_prompt,
         )
+
+    def test_every_template_names_the_participants_only_when_stated(self):
+        # Names and roles only when the transcript says them (user decision,
+        # 17 Oct 2026): the section must not invite guessing.
+        expected = {
+            "it": ("## Partecipanti", "Non dedurre mai un nome."),
+            "en": ("## Participants", "Never infer a name."),
+            "es": ("## Participantes", "No deduzcas nunca un nombre."),
+        }
+        for language, (heading, rule) in expected.items():
+            with self.subTest(language=language):
+                prompt = build(language).system_prompt
+                self.assertIn(heading, prompt)
+                self.assertIn(rule, prompt)
 
     def test_T17_auto_response_follows_the_transcript_language(self):
         request = build("it", response_language="auto")

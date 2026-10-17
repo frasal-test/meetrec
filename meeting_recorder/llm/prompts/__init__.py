@@ -11,7 +11,7 @@ from ..types import LLMRequest
 
 TEMPLATE_LANGUAGES = ("it", "en", "es")
 RESPONSE_LANGUAGES = ("it", "en", "es", "auto")
-TEMPLATE_VERSION = 2
+TEMPLATE_VERSION = 3
 TEMPLATES_DIR = Path(__file__).resolve().parent
 
 # I7: always an explicit instruction in the prompt.
@@ -27,9 +27,9 @@ _RESPONSE_INSTRUCTIONS = {
 # so the headings are restated in the response language, or left to the model
 # under Auto.
 _SECTION_HEADINGS = {
-    "it": ("Sintesi", "Decisioni", "Azioni", "Punti aperti"),
-    "en": ("Summary", "Decisions", "Action items", "Open points"),
-    "es": ("Síntesis", "Decisiones", "Acciones", "Puntos abiertos"),
+    "it": ("Sintesi", "Partecipanti", "Decisioni", "Azioni", "Punti aperti"),
+    "en": ("Summary", "Participants", "Decisions", "Action items", "Open points"),
+    "es": ("Síntesis", "Participantes", "Decisiones", "Acciones", "Puntos abiertos"),
 }
 
 
