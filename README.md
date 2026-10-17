@@ -159,7 +159,7 @@ The MeetRec menu has:
 
 Before every recording MeetRec asks "Have you told the participants?" in the language of the preset (English for Auto detect). "Copy notice and record" also puts a short notice on the clipboard, ready to paste into the meeting chat. Ticking "Don't ask again" turns the question off; the menu item turns it back on. See [Responsible use](#responsible-use).
 
-While recording, the icon's right-hand sound bar becomes a dot and the elapsed time appears next to it. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The icon shows the percentage, then ✓ (or ! if the job failed), and the menu shows a progress bar with the current phase (phase names are in Italian), diarization included. A macOS notification appears when the job finishes.
+While recording, the icon's right-hand sound bar becomes a dot and the elapsed time appears next to it. After Stop, the session is queued and transcribed in the background, so you can start another meeting meanwhile. The icon shows the percentage, then ✓ (or ! if the job failed), and the menu shows a progress bar with the current phase, diarization included. A macOS notification appears when the job finishes.
 
 ### Terminal
 
