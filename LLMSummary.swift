@@ -753,6 +753,11 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
     private var status: LLMSettingsStatus
     private let window: NSWindow
     private let root = NSStackView()
+    static let privacyNotice = "Con un LLM il testo delle riunioni (mai l'audio) viene "
+        + "inviato al servizio scelto: Anthropic, OpenAI o Oracle. Da quel momento il "
+        + "trattamento dei dati è regolato dai termini d'uso, dall'informativa privacy "
+        + "e dagli eventuali accordi (SLA, DPA) di quel servizio, non da MeetRec. "
+        + "Verificali prima di usarlo per riunioni riservate."
     private var rows: [LLMKeyRow] = []
     private let autoCheckbox = NSButton(
         checkboxWithTitle: "Automatic Summary",
@@ -800,6 +805,13 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         root.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
 
         root.addArrangedSubview(makeLabel("API key", size: 13, weight: .semibold))
+        // Always on screen, not only in the alert before the first key: the
+        // user should know where the text goes every time a key is managed.
+        let notice = NSTextField(wrappingLabelWithString: Self.privacyNotice)
+        notice.font = NSFont.systemFont(ofSize: 11)
+        notice.textColor = .secondaryLabelColor
+        fixWidth(notice, width)
+        root.addArrangedSubview(notice)
         for provider in status.providers {
             let row = makeRow(provider: provider, index: rows.count)
             rows.append(row)
@@ -1022,6 +1034,9 @@ final class LLMSettingsController: NSObject, NSWindowDelegate {
         let alert = NSAlert()
         alert.messageText = "Il testo della riunione (non l'audio) verrà inviato a "
             + "\(row.name) per creare il riassunto."
+        alert.informativeText = "Il trattamento di quel testo è regolato dai termini "
+            + "d'uso e dall'informativa privacy di \(row.name) (o dal contratto "
+            + "aziendale che hai con il servizio), non da MeetRec."
         let proceed = alert.addButton(withTitle: "Continua")
         let cancel = alert.addButton(withTitle: "Annulla")
         proceed.keyEquivalent = ""

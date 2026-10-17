@@ -82,6 +82,7 @@ Nessun messaggio contiene dettagli tecnici grezzi o API key.
 ```
 
 - Le key vanno nel Portachiavi di macOS. Ogni key è verificata con una chiamata minima quando viene salvata (I4); se la verifica fallisce non viene salvata.
-- Prima di salvare la prima key di un servizio: avviso "Il testo della riunione (non l'audio) verrà inviato a <servizio> per creare il riassunto."
+- Sempre visibile sotto "API key": avvertenza che il testo delle riunioni (mai l'audio) viene inviato al servizio scelto, e che da quel momento il trattamento dei dati è regolato dai termini d'uso, dall'informativa privacy e dagli eventuali accordi (SLA, DPA) di quel servizio, non da MeetRec.
+- Prima di salvare la prima key di un servizio: avviso "Il testo della riunione (non l'audio) verrà inviato a <servizio> per creare il riassunto.", con la stessa precisazione sul trattamento dei dati.
 - Automatic Summary è spento all'installazione. Attivandolo compare la scelta del modello tra quelli con key, **senza preselezione**: l'interruttore resta spento finché l'utente non sceglie un modello.
 - La lingua di risposta in modalità automatica è sempre Auto e non si sceglie qui.
