@@ -614,7 +614,7 @@ final class MenuController: NSObject, @unchecked Sendable {
 
     /// `worker --once` makes one attempt per job. A failed attempt leaves the
     /// job pending for a retry that nothing else would start, and the menu
-    /// would sit on "Nuovo tentativo" forever. Rerun the worker while a job is
+    /// would sit on "Retrying" forever. Rerun the worker while a job is
     /// pending; it moves the job to failed once its attempts run out.
     private func runWorkerUntilSettled() -> Bool {
         var status = runControl(["worker", "--once"])
@@ -757,35 +757,35 @@ final class MenuController: NSObject, @unchecked Sendable {
     private func phaseTitle(_ phase: String) -> String {
         switch phase {
         case "queued":
-            return "In coda"
+            return "Queued"
         case "starting":
-            return "Avvio elaborazione"
+            return "Starting"
         case "loading_model":
-            return "Caricamento faster-whisper"
+            return "Loading faster-whisper"
         case "transcribing_microphone":
-            return "Trascrizione microfono"
+            return "Transcribing microphone"
         case "loading_diarizer":
-            return "Caricamento pyannote"
+            return "Loading pyannote"
         case "transcribing_system":
-            return "Trascrizione audio di sistema"
+            return "Transcribing system audio"
         case "diarizing_system":
-            return "Diarizzazione interlocutori"
+            return "Separating speakers"
         case "diarization_complete":
-            return "Diarizzazione completata"
+            return "Speakers separated"
         case "merging":
-            return "Unione delle timeline"
+            return "Merging timelines"
         case "writing_outputs":
-            return "Scrittura transcript"
+            return "Writing transcript"
         case "on_stop":
-            return "Operazione finale"
+            return "Finishing up"
         case "complete":
-            return "Transcript completato"
+            return "Transcript complete"
         case "retrying":
-            return "Nuovo tentativo"
+            return "Retrying"
         case "failed":
-            return "Elaborazione fallita"
+            return "Processing failed"
         default:
-            return "Elaborazione transcript"
+            return "Processing transcript"
         }
     }
 
