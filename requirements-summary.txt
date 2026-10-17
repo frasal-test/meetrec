@@ -1,0 +1,4 @@
+# LLM summary providers. Installed when the first API key is saved in
+# Settings, not at app install: the SDKs are imported only when a provider is used.
+-r requirements.txt
+anthropic>=1,<2

@@ -39,3 +39,14 @@ class AdapterRegistry:
     def create(self, provider: str, keystore: KeyStore) -> ProviderAdapter | None:
         factory = self._factories.get(provider)
         return factory(keystore) if factory else None
+
+
+def default_registry() -> AdapterRegistry:
+    """The adapters shipped with the app. Importing them does not import any
+    provider SDK (I9): each adapter loads its SDK on first use. OpenAI and OCI
+    are added with their adapters."""
+    from .anthropic import AnthropicAdapter
+
+    registry = AdapterRegistry()
+    registry.register("anthropic", AnthropicAdapter)
+    return registry
