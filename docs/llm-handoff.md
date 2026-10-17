@@ -27,17 +27,27 @@ Punto di ripartenza per una nuova sessione. Leggere prima `CLAUDE.md` (regole vi
 - Tutta la UI è in inglese, compresa la parte LLM e le fasi della trascrizione; il `.md` del riassunto resta nella lingua di risposta.
 
 ## Provato dall'utente sulla beta (17 ottobre)
-Settings con una, due e tre key (Anthropic, OpenAI, OCI in `eu-frankfurt-1`), ASK_CHOICE con uno e due modelli, modo automatico, transcript troppo corto, riassunti con Anthropic e OCI (OCI verificato: endpoint, policy IAM, `max_tokens`, `usage`). Tutto corretto.
+Tutti i test manuali sono superati:
+- Settings con una, due e tre key (Anthropic, OpenAI, OCI in `eu-frankfurt-1`), ASK_CHOICE con uno e due modelli, modo automatico, transcript troppo corto, riassunti con Anthropic e OCI (OCI verificato: endpoint, policy IAM, `max_tokens`, `usage`).
+- Avvertenza privacy in Settings, notifiche native (dopo averle permesse in Impostazioni di Sistema).
+- Retry senza rete; key sbagliata (rifiutata, la key salvata resta); "None" e chiusura della finestra; automatico più Remove; salvataggio di emergenza con `chmod a-w` (sequenza SAVE_RESULT → EMERGENCY_SAVE → END_SAVE_ERROR, file `-rw-------`); nessun LLM configurato; doctor dal menu.
+
+Cambiato durante i test (tutto committato e pushato):
+- Tutta la UI in inglese, compresa la parte LLM e (anche su `main`) le fasi della trascrizione.
+- Finestra del doctor con l'elenco ✓/✗ e il bottone "Open log".
+- Key lette dal Portachiavi solo dopo la scelta e solo per il provider scelto (`providers` all'avvio, evento `need_key`, scenario T50). Prima macOS chiedeva la password tre volte dopo ogni build: è normale con la firma "MeetRec Dev" senza Team ID, il permesso è legato alla build; "Always Allow" vale fino alla build successiva.
+- Errori delle notifiche in `.menubar.log` (con `open` lo stderr dell'app non va da nessuna parte).
+- Key rifiutata in Settings: "<servizio> did not accept this API key…", non "no longer valid".
+- Decisi e lasciati così: la key salvata resta se la nuova è rifiutata (c'è Remove); la copia di emergenza resta solo `.json`.
 
 ## Da fare
-1. **Ricompilare la beta** quando l'utente la chiude: servono le notifiche native e l'avvertenza privacy in Settings (commit `b4ea6f6` e `7f2cdab`), che la beta aperta non ha ancora. Poi verificare con l'utente: permesso alle notifiche al primo avvio, clic sulla notifica che apre il `.md`.
-2. **Test manuali ancora da fare** (lista data all'utente): Riprova senza rete, key sbagliata, "Nessuno" e chiusura della finestra, modo automatico più "Rimuovi", salvataggio di emergenza con `chmod a-w` sulla sessione, nessun LLM configurato, doctor dal menu.
-3. **Script di prova reale** che l'utente lancia da sé con le proprie key (mai incollate in chat).
-4. **README e INSTALL** per quando si deciderà il rilascio: funzione, nota privacy, `summaries/`, come ottenere le key (per OCI: Console → Generative AI → API keys in Frankfurt, policy IAM da "Add API Key Permissions").
-5. **Aperti, da decidere con l'utente**:
+1. **Script di prova reale** che l'utente lancia da sé con le proprie key (mai incollate in chat).
+2. **README e INSTALL** per quando si deciderà il rilascio: funzione, nota privacy, `summaries/`, come ottenere le key (per OCI: Console → Generative AI → API keys in Frankfurt, policy IAM da "Add API Key Permissions"), permesso alle notifiche, richiesta della password del Portachiavi dopo ogni aggiornamento.
+3. **Aperti, da decidere con l'utente**:
    - la Sintesi esce a volte come elenco puntato invece di 5–10 righe;
    - voce "elabora un transcript già salvato" (fuori ambito, ma utile per confrontare i modelli);
-   - come OCI segnala il credito esaurito (non verificabile finché non succede).
+   - come OCI segnala il credito esaurito (non verificabile finché non succede);
+   - quando unire la beta a `main` (rilascio).
 
 ## Licenza (decisa il 17 ottobre)
 GPL-3.0 da dopo v0.9.1 (commit `c000c7c` su `main`, portato sulla beta). v0.9 e v0.9.1 restano MIT. Nessun CLA per ora: servirebbe solo per una futura doppia licenza commerciale con contributi esterni.
