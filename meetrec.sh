@@ -105,15 +105,17 @@ build_menubar() {
     local sources=(
         "$SCRIPT_DIR/RecordingCore.swift"
         "$SCRIPT_DIR/menubar.swift"
+        "$SCRIPT_DIR/LLMSummary.swift"
         "$SCRIPT_DIR/Menubar-Info.plist"
     )
     if needs_build "$MENUBAR" "${sources[@]}"; then
         mkdir -p "$MENUBAR_APP/Contents/MacOS"
         cp "$SCRIPT_DIR/Menubar-Info.plist" "$MENUBAR_INFO"
         swiftc -framework AppKit -framework ScreenCaptureKit \
-            -framework AVFoundation \
+            -framework AVFoundation -framework Security \
             -O "$SCRIPT_DIR/RecordingCore.swift" \
-            "$SCRIPT_DIR/menubar.swift" -o "$MENUBAR"
+            "$SCRIPT_DIR/menubar.swift" \
+            "$SCRIPT_DIR/LLMSummary.swift" -o "$MENUBAR"
         echo "Built: $MENUBAR_APP"
     else
         echo "Up to date: $MENUBAR_APP"

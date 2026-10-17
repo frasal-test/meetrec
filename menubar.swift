@@ -78,6 +78,13 @@ private struct JobProgress: Decodable {
 private struct JobStatus: Decodable {
     let state: String
     let progress: JobProgress?
+    let lastError: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case state
+        case progress
+        case lastError = "last_error"
+    }
 }
 
 private final class SessionLog: @unchecked Sendable {
@@ -123,12 +130,20 @@ final class MenuController: NSObject, @unchecked Sendable {
     private let projectURL: URL
     private let recordingsURL: URL
     private let pythonURL: URL
+    private let llmControl: LLMControl
     /// Recovery at launch and post-recording transcription both run
     /// `worker --once`. A serial queue keeps them from overlapping: the
     /// second run starts after the first finishes and picks up whatever it
     /// enqueued in the meantime.
     private let workerQueue = DispatchQueue(
         label: "meetrec.transcription-worker",
+        qos: .utility
+    )
+    /// `llm-run` waits for the user (ASK_CHOICE, ASK_RETRY), so it must not
+    /// share the queue of the transcription (flow.md, "Confine tra processi").
+    /// Serial: a second summary waits for the first one's screens.
+    private let llmQueue = DispatchQueue(
+        label: "meetrec.llm-summary",
         qos: .utility
     )
 
@@ -147,11 +162,26 @@ final class MenuController: NSObject, @unchecked Sendable {
     /// reads the same value. Nil until the first read comes back.
     private var deleteAudioEnabled: Bool?
     private static let skipConsentPromptKey = "skipConsentPrompt"
+    /// Result of the startup check of the LLM flow; false until it answers.
+    private var llmAvailable = false
+    private var llmCheckFinished = false
+    private var llmProblems: [String] = []
+    private var llmProgressText: String?
+    private var llmProgressLabel: NSTextField?
+    private var llmProgressIndicator: NSProgressIndicator?
+    private var lastSummaryURL: URL?
+    private var lastEmergencyURL: URL?
+    private var choiceController: LLMChoiceWindowController?
+    private var settingsController: LLMSettingsController?
 
     init(projectURL: URL) {
         self.projectURL = projectURL
         let pythonURL = projectURL.appendingPathComponent(".venv/bin/python")
         self.pythonURL = pythonURL
+        self.llmControl = LLMControl(
+            projectURL: projectURL,
+            pythonURL: pythonURL
+        )
         self.recordingsURL = MenuController.resolveRecordingsURL(
             projectURL: projectURL,
             pythonURL: pythonURL
@@ -159,6 +189,7 @@ final class MenuController: NSObject, @unchecked Sendable {
         super.init()
         configureMenu()
         loadDeleteAudioSetting()
+        runLLMStartupCheck()
         resumePendingTranscriptions()
     }
 
@@ -257,6 +288,10 @@ final class MenuController: NSObject, @unchecked Sendable {
             addProgressItem(to: menu)
             menu.addItem(.separator())
         }
+        if llmProgressText != nil {
+            addLLMProgressItem(to: menu)
+            menu.addItem(.separator())
+        }
         if activeRecorder == nil {
             menu.addItem(
                 withTitle: "Start recording — Italiano",
@@ -291,11 +326,39 @@ final class MenuController: NSObject, @unchecked Sendable {
             action: #selector(openRecordings),
             keyEquivalent: "o"
         ).target = self
+        if lastSummaryURL != nil {
+            menu.addItem(
+                withTitle: "Open last summary",
+                action: #selector(openLastSummary),
+                keyEquivalent: ""
+            ).target = self
+        }
+        if lastEmergencyURL != nil {
+            menu.addItem(
+                withTitle: "Open emergency summary",
+                action: #selector(openEmergencySummary),
+                keyEquivalent: ""
+            ).target = self
+        }
         menu.addItem(
             withTitle: "Run doctor",
             action: #selector(runDoctor),
             keyEquivalent: "d"
         ).target = self
+        menu.addItem(
+            withTitle: "Settings…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        ).target = self
+        if llmCheckFinished && !llmAvailable {
+            // Disabled (no action): a status line, not a command.
+            let unavailable = menu.addItem(
+                withTitle: "LLM summary unavailable — run doctor",
+                action: nil,
+                keyEquivalent: ""
+            )
+            unavailable.toolTip = llmProblems.joined(separator: "\n")
+        }
         menu.addItem(.separator())
         let consentItem = menu.addItem(
             withTitle: "Ask about participants before recording",
@@ -350,6 +413,31 @@ final class MenuController: NSObject, @unchecked Sendable {
         progressLabel = label
         progressIndicator = indicator
         updateProgressUI()
+    }
+
+    private func addLLMProgressItem(to menu: NSMenu) {
+        let item = NSMenuItem()
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 58))
+        let label = NSTextField(labelWithString: llmProgressText ?? "")
+        label.frame = NSRect(x: 14, y: 32, width: 292, height: 18)
+        label.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        label.lineBreakMode = .byTruncatingTail
+
+        // The call has no measurable progress: indeterminate, no percentage.
+        let indicator = NSProgressIndicator(
+            frame: NSRect(x: 14, y: 12, width: 292, height: 12)
+        )
+        indicator.style = .bar
+        indicator.controlSize = .small
+        indicator.isIndeterminate = true
+        indicator.startAnimation(nil)
+
+        view.addSubview(label)
+        view.addSubview(indicator)
+        item.view = view
+        menu.addItem(item)
+        llmProgressLabel = label
+        llmProgressIndicator = indicator
     }
 
     @objc private func startItalian() {
@@ -591,12 +679,190 @@ final class MenuController: NSObject, @unchecked Sendable {
             DispatchQueue.main.async {
                 self.pollProgress()
             }
-            notify(
-                title: "MeetRec",
-                message: succeeded
-                    ? "Transcript ready: \(sessionURL.lastPathComponent)"
-                    : "Transcription needs attention: \(sessionURL.lastPathComponent)"
+            guard succeeded else {
+                notify(
+                    title: "MeetRec",
+                    message: transcriptFailureMessage(sessionURL)
+                )
+                return
+            }
+            // The summary flow tells the user how it ended, so there is one
+            // notification for the transcript, not two.
+            startSummary(sessionURL)
+        }
+    }
+
+    /// Stato: END_FATAL. A failed SAVE_TRANSCRIPT ends the job `failed` with
+    /// `last_error` "TranscriptSaveError: <message>"; the message is already
+    /// the text of ui.md. It is shown only once the attempts ran out (the
+    /// job is `failed`, not `pending`).
+    private func transcriptFailureMessage(_ sessionURL: URL) -> String {
+        let prefix = "TranscriptSaveError:"
+        if let data = try? Data(
+               contentsOf: sessionURL.appendingPathComponent("job.json")
+           ),
+           let job = try? JSONDecoder().decode(JobStatus.self, from: data),
+           job.state == "failed",
+           let error = job.lastError,
+           error.hasPrefix(prefix)
+        {
+            let message = error.dropFirst(prefix.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !message.isEmpty {
+                return message
+            }
+        }
+        return "Transcription needs attention: \(sessionURL.lastPathComponent)"
+    }
+
+    /// Stato: precondizione, controllo all'avvio. Offline, off the main thread.
+    private func runLLMStartupCheck() {
+        llmQueue.async { [self] in
+            let result = llmControl.startupCheck()
+            DispatchQueue.main.async {
+                self.llmAvailable = result.ok
+                self.llmProblems = result.problems
+                self.llmCheckFinished = true
+                self.rebuildMenu()
+            }
+        }
+    }
+
+    /// Transition: SAVE_TRANSCRIPT ok -> CHECK_LENGTH, in the separate LLM
+    /// process. Runs on `llmQueue`, never on the transcription queue.
+    private func startSummary(_ sessionURL: URL) {
+        llmQueue.async { [self] in
+            // Queued after the startup check, so its answer is already in.
+            let available = DispatchQueue.main.sync { self.llmAvailable }
+            guard available else {
+                notify(
+                    title: "MeetRec",
+                    message: "Transcript ready: \(sessionURL.lastPathComponent)"
+                )
+                return
+            }
+            let driver = LLMFlowDriver(
+                control: llmControl,
+                handlers: LLMFlowDriver.Handlers(
+                    askChoice: { [weak self] screen, answer in
+                        self?.presentChoice(screen, answer: answer)
+                    },
+                    askRetry: { message, answer in
+                        answer(llmAskRetry(message: message))
+                    },
+                    progress: { [weak self] model in
+                        self?.showLLMProgress("Riassunto con \(model)…")
+                    }
+                )
             )
+            let result = driver.run(
+                session: sessionURL,
+                keys: LLMKeychain.storedKeys()
+            )
+            DispatchQueue.main.async {
+                self.finishSummary(result)
+            }
+        }
+    }
+
+    /// Stato: ASK_CHOICE.
+    private func presentChoice(
+        _ screen: LLMChoiceScreen,
+        answer: @escaping (LLMChoiceAnswer) -> Void
+    ) {
+        let controller = LLMChoiceWindowController(screen: screen) { [weak self] result in
+            self?.choiceController = nil
+            answer(result)
+        }
+        choiceController = controller
+        controller.show()
+    }
+
+    /// Stato: CALL_PROVIDER. Indeterminate, no interaction.
+    private func showLLMProgress(_ text: String) {
+        llmProgressText = text
+        if let label = llmProgressLabel {
+            label.stringValue = text
+        } else {
+            rebuildMenu()
+        }
+        if activeRecorder == nil && processingSessionURL == nil {
+            setStatus(recording: false, text: "…")
+        }
+    }
+
+    /// Outcomes DONE, END_NO_LLM, END_ERROR, END_SAVE_ERROR, END_FATAL: the
+    /// message comes ready from Python (ui.md, "Messaggi di esito").
+    private func finishSummary(_ result: LLMRunResult) {
+        llmProgressText = nil
+        llmProgressLabel = nil
+        llmProgressIndicator = nil
+        if activeRecorder == nil && processingSessionURL == nil {
+            setStatus(recording: false, text: "")
+        }
+        let message: String
+        switch result {
+        case .outcome(let outcome):
+            message = outcome.message.isEmpty
+                ? "Riassunto non riuscito: errore interno"
+                : outcome.message
+            if outcome.kind == "DONE", let url = outcome.resultPath {
+                lastSummaryURL = url
+            } else if outcome.kind == "END_SAVE_ERROR",
+                      let url = outcome.emergencyPath
+            {
+                lastEmergencyURL = url
+            }
+        case .startupCheckFailed:
+            message = "Riassunto non disponibile: controllo iniziale fallito. "
+                + "Esegui doctor"
+        case .failed:
+            // Never the raw output of the process.
+            message = "Riassunto non riuscito: errore interno"
+        }
+        rebuildMenu()
+        notify(title: "MeetRec", message: message)
+    }
+
+    @objc private func openLastSummary() {
+        if let url = lastSummaryURL { NSWorkspace.shared.open(url) }
+    }
+
+    @objc private func openEmergencySummary() {
+        if let url = lastEmergencyURL { NSWorkspace.shared.open(url) }
+    }
+
+    /// Reads the current state first, so the window is built with the
+    /// providers of the model table and the saved settings.
+    @objc private func openSettings() {
+        if let controller = settingsController {
+            controller.show()
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let status = LLMSettingsStatus.fetch(llmControl)
+            DispatchQueue.main.async {
+                if let controller = self.settingsController {
+                    controller.show()
+                    return
+                }
+                guard let status else {
+                    self.showAlert(
+                        title: "Could not read the settings",
+                        message: "Check the Python environment in .venv."
+                    )
+                    return
+                }
+                let controller = LLMSettingsController(
+                    control: self.llmControl,
+                    status: status
+                )
+                controller.onClose = { [weak self] in
+                    self?.settingsController = nil
+                }
+                self.settingsController = controller
+                controller.show()
+            }
         }
     }
 
@@ -804,6 +1070,7 @@ final class MenuController: NSObject, @unchecked Sendable {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 if self.activeRecorder == nil
                     && self.processingSessionURL == nil
+                    && self.llmProgressText == nil
                 {
                     self.setStatus(recording: false, text: "")
                 }
@@ -893,7 +1160,10 @@ final class MenuController: NSObject, @unchecked Sendable {
     }
 
     private func shellQuoted(_ value: String) -> String {
-        "\"\(value.replacingOccurrences(of: "\"", with: "\\\""))\""
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     private func showAlert(title: String, message: String) {
@@ -1011,6 +1281,10 @@ private struct MeetRecMenuApplication {
             projectURL = URL(fileURLWithPath: CommandLine.arguments[0])
                 .deletingLastPathComponent()
         }
+
+        // Answering llm-run after it exited must fail the write, not kill the
+        // app with SIGPIPE.
+        signal(SIGPIPE, SIG_IGN)
 
         let application = NSApplication.shared
         application.setActivationPolicy(.accessory)
