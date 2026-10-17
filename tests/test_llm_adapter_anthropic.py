@@ -230,11 +230,11 @@ class ErrorMappingTests(AdapterTestCase):
         self.assertIsInstance(error, E.TimeoutLLMError)
         self.assertTrue(error.retryable)
 
-    def test_connection_error_is_unknown_error(self):
-        # DA DEFINIRE: the contract has no class for offline/DNS/refused.
+    def test_connection_error_is_a_retryable_timeout_error(self):
         error = self.call_error(APIConnectionError("Connection error."))
-        self.assertIsInstance(error, E.UnknownLLMError)
-        self.assertFalse(error.retryable)
+        self.assertIsInstance(error, E.TimeoutLLMError)
+        self.assertTrue(error.retryable)
+        self.assertIn("connessione", error.user_message)
 
     def test_other_400_is_bad_request(self):
         exc = BadRequestError(

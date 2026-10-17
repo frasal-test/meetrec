@@ -35,6 +35,8 @@ PROVIDER = "anthropic"
 CONNECT_TIMEOUT_SECONDS = 10.0
 READ_TIMEOUT_SECONDS = 180.0
 
+CONNECTION_MESSAGE = "Impossibile raggiungere il servizio: controlla la connessione."
+
 
 def _mentions_credit_balance(exc: Any) -> bool:
     """Anthropic reports an exhausted credit as a 400 (or 402 billing_error)
@@ -178,8 +180,9 @@ class AnthropicAdapter:
             if isinstance(exc, sdk.APITimeoutError):
                 return TimeoutLLMError()
             if isinstance(exc, sdk.APIConnectionError):
-                # DA DEFINIRE: errore di connessione non coperto dal contratto
-                return UnknownLLMError()
+                # Offline, DNS or refused: retryable like a timeout
+                # (adapter-contract.md).
+                return TimeoutLLMError(user_message=CONNECTION_MESSAGE)
             if isinstance(exc, sdk.APIStatusError):
                 return _classify_status(exc)
         except Exception:  # noqa: BLE001 - classification must never escape

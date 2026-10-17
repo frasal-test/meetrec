@@ -70,7 +70,7 @@ Ogni eccezione che esce da un adapter è una di queste. La classificazione si ba
 
 | Classe | Casi tipici | `retryable` |
 |---|---|---|
-| `TimeoutLLMError` | timeout di connessione o lettura | sì |
+| `TimeoutLLMError` | timeout di connessione o lettura; connessione assente, DNS non risolto, connessione rifiutata | sì |
 | `RateLimitError` | 429 per limite di frequenza | sì |
 | `ProviderError` | 5xx, provider sovraccarico | sì |
 | `InsufficientCreditsError` | credito esaurito (vedi nota) | no |
@@ -112,7 +112,7 @@ Token mancanti o modello assente dalla tabella → `amount = None`.
 
 **Stima mostrata in ASK_CHOICE** (prima della chiamata):
 ```
-X = token stimati del transcript (caratteri / 4) + token del template
+X = token stimati del transcript (caratteri / 3) + token del template
 stima = X × price_input / 1e6 + min(X, max_output_tokens) × price_output / 1e6
 ```
 Il riassunto si assume non più lungo del transcript, quindi la stima è un limite superiore ragionevole. Mostrata nella valuta della tabella, per esempio "max ~$0.09".

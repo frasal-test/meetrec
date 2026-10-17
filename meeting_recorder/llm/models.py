@@ -10,9 +10,9 @@ from .types import Cost, Usage
 
 
 # One limit for every model, below every long-context price tier (I17), so the
-# table can carry a single price per model. The tokens are estimated as
-# characters / 4, so the limit keeps 10% below the lowest tier (Anthropic,
-# 100,000) to absorb the estimate's error.
+# table can carry a single price per model. The limit keeps 10% below the
+# lowest tier (Anthropic, 100,000), and the estimate in estimate_tokens is
+# deliberately pessimistic, so the real count stays under the tier.
 MAX_INPUT_TOKENS = 90_000
 
 CURRENCY = "USD"
@@ -81,8 +81,10 @@ def find_model(
 
 
 def estimate_tokens(text: str) -> int:
-    """Rough token count: ceil(characters / 4)."""
-    return math.ceil(len(text) / 4)
+    """Rough token count: ceil(characters / 3). Pessimistic on purpose: recent
+    tokenizers (Haiku 5.5 counts about 30% more than its predecessors) spend
+    more tokens per character, Italian more than English."""
+    return math.ceil(len(text) / 3)
 
 
 def compute_cost(

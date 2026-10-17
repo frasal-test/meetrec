@@ -58,10 +58,10 @@ class ModelTableTests(unittest.TestCase):
         )
         self.assertIsNone(find_model("nope"))
 
-    def test_estimate_tokens_is_ceil_of_chars_over_four(self):
+    def test_estimate_tokens_is_ceil_of_chars_over_three(self):
         self.assertEqual(estimate_tokens(""), 0)
-        self.assertEqual(estimate_tokens("abcd"), 1)
-        self.assertEqual(estimate_tokens("abcde"), 2)
+        self.assertEqual(estimate_tokens("abc"), 1)
+        self.assertEqual(estimate_tokens("abcd"), 2)
 
     def test_T21_model_missing_from_the_table_has_no_cost_not_zero(self):
         cost = compute_cost("not-in-the-table", Usage(1000, 500))

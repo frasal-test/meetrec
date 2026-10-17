@@ -32,7 +32,7 @@ Costo stimato per una riunione di 1h: circa 15–20mila token in ingresso (itali
 | `openai` | `gpt-6-luna` | 0,10 / 0,50 (long context 0,20 / 0,75) | ~1M (da verificare) | ~$0,003 |
 | `oci` | `openai.gpt-oss-120b` | 0,15 / 0,60 | 128K (prompt + risposta) | ~$0,004 |
 
-La tabella ha un solo prezzo per modello. Per non arrivare mai ai prezzi maggiorati per il long context (Anthropic oltre 100mila token, OpenAI oltre una soglia da verificare), l'app blocca i transcript oltre `MAX_INPUT_TOKENS` = 90mila token stimati, cioè circa 4,5–6 ore di parlato; il margine del 10% sotto la soglia di Anthropic copre l'errore della stima (caratteri / 4): una riunione così lunga è fuori dallo scopo dello strumento (I17, END_NO_LLM `too_long`). Se la soglia di GPT-6 Luna risultasse più bassa, il controllo all'avvio fallisce finché il limite non viene abbassato (T49).
+La tabella ha un solo prezzo per modello. Per non arrivare mai ai prezzi maggiorati per il long context (Anthropic oltre 100mila token, OpenAI oltre una soglia da verificare), l'app blocca i transcript oltre `MAX_INPUT_TOKENS` = 90mila token stimati, cioè circa 4,5–6 ore di parlato; il margine del 10% sotto la soglia di Anthropic e la stima prudente (caratteri / 3; il tokenizer di Haiku 5.5 conta circa il 30% di token in più dei modelli precedenti) tengono i token reali sotto la soglia: una riunione così lunga è fuori dallo scopo dello strumento (I17, END_NO_LLM `too_long`). Se la soglia di GPT-6 Luna risultasse più bassa, il controllo all'avvio fallisce finché il limite non viene abbassato (T49).
 
 Alternative OCI scartate:
 - **gpt-oss-20b** ($0,07 / $0,30): più economico, ma più debole in italiano.
